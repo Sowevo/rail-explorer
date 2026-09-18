@@ -21,8 +21,8 @@ function stationTooltip(station) {
 }
 
 function stationIcon() {
-  const glyph = document.createElement('i');
-  glyph.className = 'bi bi-train-front-fill';
+  const glyph = document.createElement('span');
+  glyph.className = 'rail-type-icon rail-type-rail';
   glyph.setAttribute('aria-hidden', 'true');
   return L.divIcon({className:'station-map-icon', html:glyph,
     iconSize:[22,22], iconAnchor:[11,11], tooltipAnchor:[10,0]});

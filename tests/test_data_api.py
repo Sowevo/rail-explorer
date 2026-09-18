@@ -87,9 +87,9 @@ class DataApiTests(unittest.TestCase):
             'operation':'advance', 'page_id':'page-a', 'before':{'way_count':1},
             'after':{'way_count':2}, 'password':'not-written'})
         self.assertEqual(response.status_code, 200)
-        records = [json.loads(line) for line in (Path(self.directory.name)/'logs/rail.log').read_text().splitlines()]
+        records = (Path(self.directory.name)/'logs/rail.log').read_text().splitlines()
         record = records[-1]
-        self.assertEqual(record['request_id'], response.headers['X-Request-ID'])
-        self.assertEqual(record['diagnostics'][0]['operation'], 'advance')
-        self.assertNotIn('not-written', json.dumps(record))
+        self.assertIn('request_id=' + response.headers['X-Request-ID'], record)
+        self.assertIn('diagnostics.0.operation=advance', record)
+        self.assertNotIn('not-written', record)
         self.assertEqual(self.client.post('/diagnostics', json={'details':'x'*65000}).status_code, 400)

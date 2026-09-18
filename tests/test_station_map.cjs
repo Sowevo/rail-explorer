@@ -12,7 +12,7 @@ const map = {
 const L = {
   Control:{extend(methods){return class {addTo(){methods.onAdd.call(this);return this;}};}},
   DomUtil:{create:element},DomEvent:{disableClickPropagation(){}},
-  divIcon:options=>{assert.equal(options.html.className,'bi bi-train-front-fill');return options;},
+  divIcon:options=>{assert.equal(options.html.className,'rail-type-icon rail-type-rail');return options;},
   marker:point=>(markerPoints.push(point), {
     getElement:element,addTo(){active.add(this);return this;},remove(){active.delete(this);},setLatLng(){},
     bindTooltip(label, config){assert.equal(config.permanent,false);assert.equal(config.className,'station-map-detail');this.label=label;return this;},
@@ -32,7 +32,7 @@ assert.equal(tooltip.children[2].textContent,'JR · 京浜東北線');
 assert.equal(tooltip.children[3].textContent,'JR · 第三线');
 assert.equal(tooltip.children[4].textContent,'另有 1 条线路');
 assert.equal(context.stationTooltip({name:'未知站'}).children.length,1);
-assert.equal(context.stationIcon().html.className,'bi bi-train-front-fill');
+assert.equal(context.stationIcon().html.className,'rail-type-icon rail-type-rail');
 const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const station=id=>({id,name:"東京",lat:35,lon:139,lines:[]});
 (async()=>{

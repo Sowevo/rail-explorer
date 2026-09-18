@@ -80,6 +80,12 @@
     }
     #map { width: 100%; height: 100%; min-height: 600px; border-radius: 8px; }
     .station-map-status { background:#fffe; border-radius:4px; padding:5px 8px; font-size:12px; }
+    .rail-type-icon { display:inline-block; width:18px; height:18px; flex-shrink:0; vertical-align:-3px; background-color:currentColor; mask:var(--rail-icon) center / contain no-repeat; -webkit-mask:var(--rail-icon) center / contain no-repeat; }
+    .rail-type-rail { --rail-icon:url('/static/icons/temaki/train.svg'); }
+    .rail-type-subway { --rail-icon:url('/static/icons/temaki/subway.svg'); }
+    .rail-type-light_rail { --rail-icon:url('/static/icons/temaki/light_rail.svg'); }
+    .rail-type-monorail { --rail-icon:url('/static/icons/temaki/monorail.svg'); }
+    .station-map-icon .rail-type-icon { width:17px; height:17px; }
     .station-map-icon { display:flex; align-items:center; justify-content:center; color:#6d28d9; font-size:17px; background:transparent; border:0; filter:drop-shadow(0 0 1px white) drop-shadow(0 0 2px white); }
     .station-map-icon:hover, .station-map-icon:focus { color:#3b0764; }
     .station-map-detail { font-size:13px; line-height:1.6; white-space:normal; overflow-wrap:anywhere; }
@@ -115,12 +121,22 @@
     }
     #query-results .nearby-selected,
     #query-results .nearby-selected:hover,
-    #query-results .nearby-selected:focus {
+    #query-results .nearby-selected:focus,
+    #element-detail .nearby-selected,
+    #element-detail .nearby-selected:hover,
+    #element-detail .nearby-selected:focus {
       background-color: #e7f1ff;
       border-left: 4px solid #0d6efd;
       color: #084298;
     }
-    #query-results .nearby-selected > div:first-child { font-weight: 600; }
+    #query-results .nearby-selected .nearby-way-label > div:first-child,
+    #element-detail .nearby-selected > div:first-child,
+    #element-detail .nearby-selected .nearby-way-label > div:first-child { font-weight: 600; }
+    .nearby-way-row { display:flex; align-items:center; gap:4px; padding:0 9px 0 0; }
+    .nearby-way-label { flex:1; min-width:0; border:0; background:transparent; text-align:left; padding:8px 7px 8px 12px; color:inherit; overflow-wrap:anywhere; }
+    .nearby-way-label:hover { background:rgba(0,0,0,.025); }
+    .nearby-way-label:focus-visible { outline:2px solid #0d6efd; outline-offset:-2px; }
+    .nearby-way-actions { display:flex; flex-shrink:0; gap:4px; margin-left:auto; }
     .list-group-item.active-choice {
       background: #e3f2fd;
       color: #1976d2;
@@ -893,13 +909,21 @@
     let queryCircle = null;
     let previewLayer = null;
 
+    function clearQueryResults() {
+      const container = document.getElementById('query-results');
+      container.querySelectorAll('.rail-type-icon').forEach(icon => {
+        bootstrap.Tooltip.getInstance(icon)?.dispose();
+      });
+      container.replaceChildren();
+    }
+
     function clearNearbyQuery() {
       selectedStartWay = null;
       if (queryMarker) map.removeLayer(queryMarker);
       if (queryCircle) map.removeLayer(queryCircle);
       queryMarker = queryCircle = null;
       map.closePopup();
-      document.getElementById('query-results').replaceChildren();
+      clearQueryResults();
     }
 
     function clearPreview() {
@@ -909,7 +933,7 @@
     }
 
     function elementTitle(item) {
-      return `${item.type === 'relation' ? '关系' : '轨道'}：${item.display_name || item.name}（${item.id}）`;
+      return `${item.type === 'relation' ? '关系：' : ''}${item.display_name || item.name}（${item.id}）`;
     }
 
     function relationDirection(item) {
@@ -922,7 +946,37 @@
         : '未标注起终点';
     }
 
-    function elementButton(item) {
+    function wayActions(id) {
+      const actions = document.createElement('div');
+      actions.className = 'nearby-way-actions';
+      const start = document.createElement('button');
+      start.type = 'button';
+      start.className = 'track-locate';
+      start.innerHTML = '<i class="bi bi-chevron-double-right" aria-hidden="true"></i>';
+      start.title = lastData?.legs?.length ? '作为下一段继续' : '从此轨道开始探索';
+      start.setAttribute('aria-label', start.title);
+      start.onclick = () => runTrackAction(async () => {
+        const hasJourney = Boolean(lastData?.legs?.length);
+        await selectWay(id, !hasJourney, {transfer:hasJourney});
+        document.getElementById('way_id').value = id;
+      });
+      const zoom = document.createElement('button');
+      zoom.type = 'button';
+      zoom.className = 'track-locate';
+      zoom.innerHTML = '<i class="bi bi-crosshair" aria-hidden="true"></i>';
+      zoom.title = '缩放到此轨道';
+      zoom.setAttribute('aria-label', zoom.title);
+      zoom.onclick = () => runTrackAction(async () => {
+        await showElement('way', id);
+        if (previewLayer && previewLayer.getBounds().isValid()) {
+          map.fitBounds(previewLayer.getBounds(), {padding:[25,25], maxZoom:18});
+        }
+      });
+      actions.append(start, zoom);
+      return actions;
+    }
+
+    function elementButton(item, anchorWay = null) {
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'list-group-item list-group-item-action';
@@ -930,13 +984,19 @@
       button.dataset.elementId = String(item.id);
       button.setAttribute('aria-pressed', 'false');
       const title = document.createElement('div');
-      title.textContent = elementTitle(item);
-      const detail = document.createElement('small');
-      detail.className = 'text-muted';
-      const relationTypes = {route:'运行线路', route_master:'线路总关系', network:'交通网络'};
-      detail.textContent = [typeNames[item.railway] || item.railway,
-        relationTypes[item.relation_type] || item.relation_type, item.route, item.ref].filter(Boolean).join(' · ');
-      button.append(title, detail);
+      if (item.type === 'way' && typeNames[item.railway]) {
+        const icon = document.createElement('span');
+        icon.className = `rail-type-icon rail-type-${item.railway} me-1`;
+        new bootstrap.Tooltip(icon, {
+          title: typeNames[item.railway], trigger: 'hover focus',
+          container: 'body', delay: 0, animation: false
+        });
+        icon.setAttribute('role', 'img');
+        icon.setAttribute('aria-label', typeNames[item.railway]);
+        title.appendChild(icon);
+      }
+      title.append(document.createTextNode(elementTitle(item)));
+      button.appendChild(title);
       const directionText = relationDirection(item);
       if (directionText) {
         const direction = document.createElement('div');
@@ -951,18 +1011,51 @@
         role.textContent = `成员角色：${roles.join(' / ')}`;
         button.appendChild(role);
       }
-      button.onclick = () => runTrackAction(() => showElement(item.type, item.id));
-      return button;
+      if (anchorWay !== null && item.scope?.hidden) {
+        const scope = document.createElement('div');
+        scope.className = 'small text-secondary mt-1';
+        scope.innerHTML = '<i class="bi bi-funnel me-1" aria-hidden="true"></i>';
+        scope.append(`仅显示相连轨道 · 已隐藏 ${item.scope.hidden} 条`);
+        button.appendChild(scope);
+      }
+      button.onclick = () => runTrackAction(() => showElement(item.type, item.id, {anchorWay, previewOnly: item.type === 'relation'}));
+      if (item.type === 'way') {
+        const row = document.createElement('div');
+        row.className = 'list-group-item nearby-way-row';
+        button.className = 'nearby-way-label';
+        row.append(button, wayActions(item.id));
+        return row;
+      }
+      const row = document.createElement('div');
+      row.className = 'list-group-item nearby-way-row';
+      button.className = 'nearby-way-label';
+      const zoom = document.createElement('button');
+      zoom.type = 'button';
+      zoom.className = 'track-locate flex-shrink-0';
+      zoom.innerHTML = '<i class="bi bi-crosshair" aria-hidden="true"></i>';
+      zoom.title = '缩放到此关系';
+      zoom.setAttribute('aria-label', zoom.title);
+      zoom.onclick = () => runTrackAction(async () => {
+        await showElement(item.type, item.id, {anchorWay, previewOnly:true});
+        if (previewLayer && previewLayer.getBounds().isValid()) {
+          map.fitBounds(previewLayer.getBounds(), {padding:[25,25], maxZoom:18});
+        }
+      });
+      row.append(button, zoom);
+      return row;
     }
 
-    async function showElement(kind, id) {
-      const data = await journeyApi.read(`/elements/${kind}/${id}`);
+    async function showElement(kind, id, {anchorWay = null, full = false, previewOnly = false} = {}) {
+      const scopeQuery = kind === 'relation' && anchorWay !== null
+        ? `?anchor_way=${encodeURIComponent(anchorWay)}&full=${full ? 1 : 0}` : '';
+      const data = await journeyApi.read(`/elements/${kind}/${id}${scopeQuery}`);
       if (kind === 'way') selectedStartWay = Number(id);
-      // 两个附近列表各自保留选择；继续查看关系时不丢失刚才选中的轨道。
+      // 继续查看关系时保留附近列表中选中的轨道。
       document.querySelectorAll('#query-results button[data-element-type]').forEach(button => {
         if (button.dataset.elementType !== kind) return;
         const selected = button.dataset.elementId === String(id);
-        button.classList.toggle('nearby-selected', selected);
+        const selectedRow = button.closest('.nearby-way-row') || button;
+        selectedRow.classList.toggle('nearby-selected', selected);
         button.setAttribute('aria-pressed', String(selected));
       });
       clearPreview();
@@ -975,6 +1068,15 @@
       if (previewDirection) {
         previewLayer.bindTooltip(`箭头：${previewDirection.label}`);
       }
+      if (previewOnly) {
+        document.querySelectorAll('#element-detail button[data-element-type="relation"]').forEach(button => {
+          const selected = button.dataset.elementId === String(id);
+          const selectedRow = button.closest('.nearby-way-row') || button;
+          selectedRow.classList.toggle('nearby-selected', selected);
+          button.setAttribute('aria-pressed', String(selected));
+        });
+        return;
+      }
       const panel = document.getElementById('element-detail');
       panel.replaceChildren();
       const heading = document.createElement('h6');
@@ -984,37 +1086,19 @@
       headingText.textContent = elementTitle(data);
       heading.appendChild(headingText);
       panel.appendChild(heading);
-      const zoom = document.createElement('button');
-      zoom.type = 'button';
-      zoom.className = 'track-locate flex-shrink-0';
-      zoom.innerHTML = '<i class="bi bi-crosshair" aria-hidden="true"></i>';
-      zoom.title = '缩放到此要素';
-      zoom.setAttribute('aria-label', '缩放到此要素');
-      zoom.disabled = !data.geometry.length;
-      zoom.onclick = () => { if (previewLayer && previewLayer.getBounds().isValid()) map.fitBounds(previewLayer.getBounds(), {padding:[25,25], maxZoom:18}); };
-      heading.appendChild(zoom);
-      if (kind === 'way') {
-        const beginLeg = async () => {
-          const hasJourney = Boolean(lastData?.legs?.length);
-          await selectWay(id, !hasJourney, {transfer:hasJourney});
-          document.getElementById('way_id').value = id;
-        };
-        if (!lastData?.legs?.length) {
-          const start = document.createElement('button');
-          start.dataset.startLeg = '';
-          start.className = 'btn btn-sm btn-primary mb-2 me-2';
-          start.innerHTML = '<i class="bi bi-play me-1" aria-hidden="true"></i>从此轨道开始探索';
-          start.onclick = () => runTrackAction(beginLeg);
-          panel.appendChild(start);
-        }
-        if (lastData?.legs?.length) {
-          const next = document.createElement('button');
-          next.dataset.nextLeg = '';
-          next.className = 'btn btn-sm btn-outline-primary mb-2';
-          next.innerHTML = '<i class="bi bi-plus-lg me-1" aria-hidden="true"></i>作为下一段继续';
-          next.onclick = () => runTrackAction(beginLeg);
-          panel.appendChild(next);
-        }
+      if (kind === 'relation') {
+        const zoom = document.createElement('button');
+        zoom.type = 'button';
+        zoom.className = 'track-locate flex-shrink-0';
+        zoom.innerHTML = '<i class="bi bi-crosshair" aria-hidden="true"></i>';
+        zoom.title = '缩放到此要素';
+        zoom.setAttribute('aria-label', zoom.title);
+        zoom.disabled = !data.geometry.length;
+        zoom.onclick = () => { if (previewLayer && previewLayer.getBounds().isValid()) map.fitBounds(previewLayer.getBounds(), {padding:[25,25], maxZoom:18}); };
+        heading.appendChild(zoom);
+      } else if (!document.querySelector(`#query-results button[data-element-type="way"][data-element-id="${Number(id)}"]`)) {
+        // 从关系成员进入的轨道可能不在附近列表中，沿用同一组图标提供操作。
+        heading.appendChild(wayActions(id));
       }
       const directionText = relationDirection(data);
       if (directionText) {
@@ -1022,6 +1106,22 @@
         direction.className = 'fw-bold my-2';
         direction.textContent = directionText;
         panel.appendChild(direction);
+      }
+      if (data.scope?.hidden) {
+        const scopeBar = document.createElement('div');
+        scopeBar.className = 'd-flex flex-wrap align-items-center gap-1 small text-secondary mb-2';
+        const label = document.createElement('span');
+        label.innerHTML = '<i class="bi bi-funnel me-1" aria-hidden="true"></i>';
+        label.append(full ? `完整关系 · ${data.scope.total} 条轨道`
+          : `仅显示相连轨道 · 已隐藏 ${data.scope.hidden} 条`);
+        label.title = `以轨道 ${data.scope.anchor_way} 为起点，仅沿此关系内的共享节点筛选；原始成员和标签不变。`;
+        const toggle = document.createElement('button');
+        toggle.type = 'button';
+        toggle.className = 'btn btn-link btn-sm p-0 ms-auto';
+        toggle.textContent = full ? '仅看相连轨道' : '查看完整关系';
+        toggle.onclick = () => runTrackAction(() => showElement(kind, id, {anchorWay, full: !full}));
+        scopeBar.append(label, toggle);
+        panel.appendChild(scopeBar);
       }
       const membershipSection = document.createElement('details');
       membershipSection.open = true;
@@ -1032,7 +1132,7 @@
       memberships.className = 'list-group mb-2';
       const endpointCount = item => Number(Boolean(item.from?.trim())) + Number(Boolean(item.to?.trim()));
       [...data.memberships].sort((a, b) => endpointCount(b) - endpointCount(a))
-        .forEach(item => memberships.appendChild(elementButton(item)));
+        .forEach(item => memberships.appendChild(elementButton(item, kind === 'way' ? Number(id) : null)));
       if (!data.memberships.length) {
         memberships.textContent = '当前索引中没有直接所属关系。';
         memberships.className = 'small text-muted mb-2';
@@ -1054,7 +1154,7 @@
       if (kind === 'relation') {
         const note = document.createElement('p');
         note.className = 'small text-muted';
-        note.textContent = `共 ${data.members.length} 个直接成员，按 OSM 原始顺序列出；高亮本地收录的 ${data.ways.length} 段轨道（含子关系）。车站、站台等未收录成员只展示信息。`;
+        note.textContent = `共 ${data.members.length} 个直接成员，按 OSM 原始顺序列出；当前高亮 ${data.ways.length} 条轨道（含子关系）；下方保留完整原始成员列表。车站、站台等未收录成员只展示信息。`;
         const members = document.createElement('div');
         members.className = 'list-group';
         members.style.maxHeight = '260px';
@@ -1077,28 +1177,26 @@
       clearPreview();
       document.getElementById('element-detail').replaceChildren();
       const container = document.getElementById('query-results');
-      container.replaceChildren();
+      clearQueryResults();
       if (queryMarker) map.removeLayer(queryMarker);
       if (queryCircle) map.removeLayer(queryCircle);
       queryMarker = L.circleMarker(latlng, {radius:5, color:'#333', fillOpacity:1}).addTo(map);
       queryCircle = L.circle(latlng, {radius, color:'#666', weight:1, fillOpacity:0.06}).addTo(map);
       const data = await journeyApi.read(`/nearby?lat=${latlng.lat}&lon=${latlng.lng}&radius=${radius}`);
       document.getElementById('query-status').textContent =
-        `附近 ${radius} 米：${data.total} 段轨道、${data.relations.length} 个所属关系。` +
-        (data.total > data.ways.length ? `仅显示最近 ${data.ways.length} 段，请减小查询半径或调整查询位置。` : '') +
-        (!data.total ? '此处未找到已收录轨道，请靠近轨道右键查询。' : '') +
+        `附近 ${radius} 米 · ${data.total} 条轨道` +
+        (data.total > data.ways.length ? `。仅显示最近 ${data.ways.length} 条，请减小查询半径或调整查询位置。` : '') +
+        (!data.total ? '。此处未找到已收录轨道，请靠近轨道右键查询。' : '') +
         (!data.relations_available ? '当前为旧索引，重新生成索引后可查看关系。' : '');
-      [['附近轨道（按距离）', data.ways], ['所属关系', data.relations]].forEach(([title, items]) => {
-        if (!items.length) return;
-        const group = document.createElement('details');
-        group.open = title === '附近轨道（按距离）';
-        const heading = document.createElement('summary');
-        heading.className = 'list-group-item bg-light fw-bold';
-        heading.textContent = title;
-        group.appendChild(heading);
-        items.forEach(item => group.appendChild(elementButton(item)));
-        container.appendChild(group);
-      });
+      if (!data.ways.length) return;
+      const group = document.createElement('details');
+      group.open = true;
+      const heading = document.createElement('summary');
+      heading.className = 'list-group-item bg-light fw-bold';
+      heading.textContent = '附近轨道（按距离）';
+      group.appendChild(heading);
+      data.ways.forEach(item => group.appendChild(elementButton(item)));
+      container.appendChild(group);
     }
 
     function disabledMenuItem(button, reason, menu) {

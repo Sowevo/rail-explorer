@@ -75,6 +75,35 @@ class NearbyTests(unittest.TestCase):
         self.assertEqual([r['id'] for r in self.index.detail('relation', 10)['memberships']], [11])
         self.assertEqual(self.index.detail('way', 2)['memberships'], [])
 
+    def test_connected_relation_scope_and_full_toggle(self):
+        self.relations[10]['members'].extend([
+            {'type': 'w', 'ref': 2, 'role': ''},
+            {'type': 'w', 'ref': 3, 'role': ''}])
+        detail = self.index.detail('relation', 10, anchor_way=1)
+        self.assertEqual([w['id'] for w in detail['ways']], [1, 3])
+        self.assertEqual(detail['scope']['hidden'], 1)
+        self.assertEqual(len(detail['members']), 4)
+        self.assertEqual(len(detail['geometry_meta']), len(detail['geometry']))
+        full = self.index.detail('relation', 10, anchor_way=1, full=True)
+        self.assertEqual([w['id'] for w in full['ways']], [1, 2, 3])
+        self.assertTrue(full['scope']['full'])
+        membership = self.index.detail('way', 1)['memberships'][0]
+        self.assertEqual(membership['scope']['hidden'], 1)
+        reverse = self.index.detail('relation', 10, anchor_way=2)
+        self.assertEqual([w['id'] for w in reverse['ways']], [2])
+        self.assertEqual(reverse['scope']['hidden'], 2)
+        with self.assertRaises(ValueError):
+            self.index.detail('relation', 10, anchor_way=999)
+
+    def test_scope_stays_inside_relation_and_handles_nested_cycle(self):
+        self.relations[10]['members'].append({'type': 'w', 'ref': 2, 'role': ''})
+        # 关系外的轨道连接两侧，也不能把另一组带入预览。
+        self.ways[3] = [2, 3]
+        detail = self.index.detail('relation', 11, anchor_way=1)
+        self.assertEqual([w['id'] for w in detail['ways']], [1])
+        self.assertEqual(detail['scope']['hidden'], 1)
+        self.assertNotIn('scope', self.index.detail('relation', 11))
+
     def test_real_pbf_relation_extraction(self):
         with tempfile.TemporaryDirectory() as directory:
             path = str(Path(directory) / 'relations.osm.pbf')

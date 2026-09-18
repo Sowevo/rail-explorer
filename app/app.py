@@ -212,7 +212,13 @@ def element_detail(kind, element_id):
     source = way_to_meta if kind == 'way' else relations if kind == 'relation' else {}
     if element_id not in source:
         return jsonify(error='当前索引中没有这个要素。'), 404
-    detail = nearby_index.detail(kind, element_id)
+    anchor = request.args.get('anchor_way')
+    try:
+        anchor = int(anchor) if anchor is not None else None
+        detail = nearby_index.detail(kind, element_id, anchor_way=anchor,
+                                     full=request.args.get('full') == '1')
+    except ValueError as error:
+        return jsonify(error=str(error)), 400
     return jsonify(detail)
 
 

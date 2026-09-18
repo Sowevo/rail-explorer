@@ -63,6 +63,42 @@ class NearbyIndex:
                 'from': tags.get('from', ''), 'to': tags.get('to', ''),
                 'roundtrip': tags.get('roundtrip') == 'yes'}
 
+    def relation_way_ids(self, relation_id):
+        pending, visited, way_ids = [relation_id], set(), []
+        while pending:
+            rid = pending.pop()
+            if rid in visited or rid not in self.relations:
+                continue
+            visited.add(rid)
+            for member in self.relations[rid]['members']:
+                if member['type'] == 'w' and member['ref'] in self.ways:
+                    way_ids.append(member['ref'])
+                elif member['type'] == 'r':
+                    pending.append(member['ref'])
+        return list(dict.fromkeys(way_ids))
+
+    def connected_scope(self, way_ids, anchor_way):
+        if anchor_way not in way_ids:
+            raise ValueError('所选轨道不在该关系的本地轨道成员中。')
+        node_ways = {}
+        for wid in way_ids:
+            for node in self.ways[wid]:
+                node_ways.setdefault(node, set()).add(wid)
+        seen, pending = {anchor_way}, [anchor_way]
+        while pending:
+            for node in self.ways[pending.pop()]:
+                for wid in node_ways.pop(node, ()):
+                    if wid not in seen:
+                        seen.add(wid)
+                        pending.append(wid)
+        return [wid for wid in way_ids if wid in seen]
+
+    def relation_scope(self, relation_id, anchor_way):
+        ways = self.relation_way_ids(relation_id)
+        connected = self.connected_scope(ways, anchor_way)
+        return connected, {'anchor_way': anchor_way, 'total': len(ways),
+                           'connected': len(connected), 'hidden': len(ways) - len(connected)}
+
     def memberships(self, kind, element_id):
         member_type = 'w' if kind == 'way' else 'r'
         result = []
@@ -71,7 +107,10 @@ class NearbyIndex:
                 continue
             roles = list(dict.fromkeys(member['role'] for member in self.relations[rid]['members']
                                        if member['type'] == member_type and member['ref'] == element_id))
-            result.append({**self.summary('relation', rid), 'roles': roles})
+            item = {**self.summary('relation', rid), 'roles': roles}
+            if kind == 'way':
+                _, item['scope'] = self.relation_scope(rid, element_id)
+            result.append(item)
         return sorted(result, key=lambda item: (item['relation_type'] != 'route', item['id']))
 
     def query(self, lat, lon, radius, limit=50):
@@ -95,26 +134,15 @@ class NearbyIndex:
                 'relations': [self.summary('relation', rid) for rid in relations],
                 'total': len(hits), 'radius': radius}
 
-    def detail(self, kind, element_id):
+    def detail(self, kind, element_id, anchor_way=None, full=False):
         result = self.summary(kind, element_id)
         meta = self.metadata[element_id] if kind == 'way' else self.relations[element_id]
-        way_ids = []
-        if kind == 'way':
-            way_ids.append(element_id)
-        else:
-            visited = set()
-            pending = [element_id]
-            while pending:
-                rid = pending.pop()
-                if rid in visited or rid not in self.relations:
-                    continue
-                visited.add(rid)
-                for member in self.relations[rid]['members']:
-                    if member['type'] == 'w' and member['ref'] in self.ways:
-                        way_ids.append(member['ref'])
-                    elif member['type'] == 'r':
-                        pending.append(member['ref'])
-        way_ids = list(dict.fromkeys(way_ids))
+        way_ids = [element_id] if kind == 'way' else self.relation_way_ids(element_id)
+        if kind == 'relation' and anchor_way is not None:
+            connected, scope = self.relation_scope(element_id, anchor_way)
+            result['scope'] = {**scope, 'full': full}
+            if not full:
+                way_ids = connected
         geometry = []
         geometry_meta = []
         for wid in way_ids:
