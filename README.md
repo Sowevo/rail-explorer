@@ -18,7 +18,7 @@
 以下命令适用于 macOS/Linux，按顺序在同一个终端执行。其他机器请替换项目路径；已有 `.venv` 时跳过创建命令，依赖已安装则无需重复安装。
 
 ```bash
-cd "/Users/sowevo/git/self/my_script/python/kml/rail"
+cd "/Users/sowevo/git/self/rail-explorer"
 python3 -m venv ".venv"
 source ".venv/bin/activate"
 python -m pip install -r "requirements.txt"
@@ -42,10 +42,10 @@ python -m pip install -r "requirements.txt"
 
 ### 2.1 自动下载并生成索引
 
-安装好 Python 依赖后，在 `rail/` 下执行，将示例 URL 替换成你复制的下载链接：
+安装好 Python 依赖后，在 `rail-explorer/` 下执行，将示例 URL 替换成你复制的下载链接：
 
 ```bash
-cd "/Users/sowevo/git/self/my_script/python/kml/rail"
+cd "/Users/sowevo/git/self/rail-explorer"
 source ".venv/bin/activate"
 python "app/parse_osm.py" "https://download.geofabrik.de/asia/japan-latest.osm.pbf"
 ```
@@ -58,10 +58,10 @@ python "app/parse_osm.py" "https://download.geofabrik.de/asia/japan-latest.osm.p
 
 ### 2.2 手动下载后传入路径生成索引
 
-使用上面获取的链接，通过浏览器或下载工具将 PBF 下载到本地（已有文件可直接使用），然后在 `rail/` 下传入实际文件路径：
+使用上面获取的链接，通过浏览器或下载工具将 PBF 下载到本地（已有文件可直接使用），然后在 `rail-explorer/` 下传入实际文件路径：
 
 ```bash
-cd "/Users/sowevo/git/self/my_script/python/kml/rail"
+cd "/Users/sowevo/git/self/rail-explorer"
 source ".venv/bin/activate"
 python "app/parse_osm.py" "/实际路径/地图.osm.pbf"
 ```
@@ -78,7 +78,7 @@ python "app/parse_osm.py" "/实际路径/地图.osm.pbf"
 
 #### 索引文件（两种方式通用）
 
-看到“索引已保存”后，脚本所在目录的 `data/`（即 `rail/app/data/`）下会生成六份索引，不受终端当前目录影响。整个 `app/data/` 已由仓库根目录的 `.gitignore` 忽略：
+看到“索引已保存”后，脚本所在目录的 `data/`（即 `rail-explorer/app/data/`）下会生成六份索引，不受终端当前目录影响。整个 `app/data/` 已由仓库根目录的 `.gitignore` 忽略：
 
 - `node_to_ways.pkl`：节点与轨道的连接关系。
 - `way_to_nodes.pkl`：每段轨道包含的节点。
@@ -103,7 +103,7 @@ python "app/parse_osm.py" --stations-only "/你的路径/区域.osm.pbf"
 
 日志记录数据请求编号，以及浏览器上报的操作名称、页面编号、数据源版本、行程修订号、操作前后段数/轨道数/首尾 way 摘要、投影距离和错误原因；不发送完整行程，不记录 Cookie。响应头 `X-Request-ID` 对应请求日志；浏览器计算记录位于 `diagnostics` 中的 `client_operation`，可用 `page_id` 串起同一页面的操作。日志上报失败不影响本地操作。
 
-在 `rail/` 目录下查看实时日志：
+在 `rail-explorer/` 目录下查看实时日志：
 
 ```bash
 tail -f "app/data/logs/rail.log"
@@ -112,7 +112,7 @@ tail -f "app/data/logs/rail.log"
 首次生成索引后或后续重新启动时，都执行以下命令，无需重复创建虚拟环境或生成索引：
 
 ```bash
-cd "/Users/sowevo/git/self/my_script/python/kml/rail"
+cd "/Users/sowevo/git/self/rail-explorer"
 source ".venv/bin/activate"
 python "app/app.py"
 ```
@@ -178,7 +178,7 @@ deactivate
 
 ## 目录结构
 ```
-rail/
+rail-explorer/
 ├── README.md           # 项目说明
 ├── requirements.txt    # Python依赖
 ├── .venv/              # 本地虚拟环境
