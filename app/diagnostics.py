@@ -1,6 +1,5 @@
 """本地轮转日志：关联请求、行程状态和投影判断，不记录 Cookie 或完整几何。"""
 
-import json
 import logging
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -21,13 +20,32 @@ def compact(value):
     return value[:1000] if isinstance(value, str) else value
 
 
-class JsonFormatter(logging.Formatter):
+def text_fields(fields, prefix=''):
+    """展开诊断字段，保持普通文本可读，并避免字段中的换行伪造日志。"""
+    for key, value in fields.items():
+        name = f'{prefix}.{key}' if prefix else str(key)
+        if value is None or value == {} or value == []:
+            continue
+        if isinstance(value, dict):
+            yield from text_fields(value, name)
+        elif isinstance(value, (list, tuple)) and any(isinstance(item, dict) for item in value):
+            for index, item in enumerate(value):
+                yield from text_fields({str(index): item}, name)
+        else:
+            rendered = str(value).replace('\r', r'\r').replace('\n', r'\n')
+            yield f'{name}={rendered}'
+
+
+class TextFormatter(logging.Formatter):
     def format(self, record):
-        data = {'time': self.formatTime(record), 'level': record.levelname,
-                **getattr(record, 'event_data', {'message': record.getMessage()})}
+        data = dict(getattr(record, 'event_data', {}))
+        event = str(data.pop('event', record.getMessage())).replace('\r', r'\r').replace('\n', r'\n')
+        header = f'{self.formatTime(record)} {record.levelname} {event}'
+        fields = list(text_fields(data))
+        result = header + (' | ' + ' | '.join(fields) if fields else '')
         if record.exc_info:
-            data['exception'] = self.formatException(record.exc_info)
-        return json.dumps(data, ensure_ascii=False, default=str)
+            result += '\n' + self.formatException(record.exc_info)
+        return result
 
 
 def record_diagnostic(event, **fields):
@@ -40,7 +58,7 @@ def configure_logging(app, directory):
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / 'rail.log'
     handler = RotatingFileHandler(path, maxBytes=5 * 1024 * 1024, backupCount=3, encoding='utf-8')
-    handler.setFormatter(JsonFormatter())
+    handler.setFormatter(TextFormatter())
     app.logger.addHandler(handler)
     app.logger.setLevel(logging.INFO)
 
