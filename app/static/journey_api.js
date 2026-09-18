@@ -75,6 +75,17 @@ function createJourneyApi({getData, datasetVersion, onDatasetChanged = () => {}}
           }
           result = await engine.advance(legs,{way_id:wid},true); break;
         }
+        case 'relationPreview':
+        case 'advanceRelation': {
+          const relationId = Number(payload.relation_id), anchor = Number(payload.anchor_way);
+          if (!Number.isSafeInteger(relationId) || !Number.isSafeInteger(anchor))
+            throw new Error('请选择有效的关系和轨道。');
+          const relation = await read(`/elements/relation/${relationId}?anchor_way=${anchor}`,{signal});
+          const ids = relation.ways.map(way => way.id);
+          result = operation === 'relationPreview' ? await engine.relationPreview(legs,ids)
+            : await engine.advanceRelation(legs,ids);
+          break;
+        }
         case 'undo': result = await engine.undo(legs); break;
         case 'startPreview': result = await engine.startPreview(legs,payload); break;
         case 'start': result = await engine.start(legs,payload); break;
@@ -116,6 +127,8 @@ function createJourneyApi({getData, datasetVersion, onDatasetChanged = () => {}}
     advance:payload => operate('advance',payload),
     forward:payload => operate('forward',payload),
     undo:() => operate('undo'),
+    relationPreview:(payload,options = {}) => operate('relationPreview',payload,{...options,mutation:false}),
+    advanceRelation:payload => operate('advanceRelation',payload),
     startPreview:payload => operate('startPreview',payload,{mutation:false}),
     start:payload => operate('start',payload),
     cutPreview:(payload,options = {}) => operate('cutPreview',payload,{...options,mutation:false}),

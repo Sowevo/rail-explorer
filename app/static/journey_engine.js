@@ -135,6 +135,114 @@ class JourneyEngine {
     }
     return this.response(updated, {...result, path:travelled});
   }
+  async relationPreview(legs, wayIds) {
+    const leg = legs.at(-1);
+    if (!leg?.path.length) throw new Error('请先选择起始轨道并确定行进方向。');
+    const last = leg.path.at(-1), directions = this.directions(leg.path, leg.path.length - 1);
+    const ids = [...new Set(wayIds.map(Number))];
+    if (!ids.length) throw new Error('该关系没有可用轨道。');
+    await this.store.ensure(ids);
+    const occurrences = new Map();
+    for (const wid of ids) {
+      const nodes = this.nodes(wid);
+      nodes.forEach((node,index) => {
+        if (!occurrences.has(node)) occurrences.set(node,[]);
+        occurrences.get(node).push({wid,index});
+      });
+    }
+    const currentNodes = this.nodes(last.way_id);
+    let travel = directions.length === 1 ? directions[0] : null, inferredSpan = null;
+    if (!travel) {
+      // 首条只有一端通向关系时可推断方向；远处的分支不影响此判断。
+      const connected = [0,currentNodes.length-1].filter(index =>
+        (occurrences.get(currentNodes[index]) || []).some(member => member.wid !== last.way_id));
+      if (leg.path.length === 1 && !last.span && ids.includes(last.way_id) &&
+          currentNodes[0] !== currentNodes.at(-1) && connected.length === 1) {
+        const exit = connected[0];
+        travel = [exit === 0 ? currentNodes.length-1 : 0,exit];
+        inferredSpan = travel;
+      } else throw new Error('请先选择下一条相连轨道，或指定起点并选择方向。');
+    }
+    const [entry,exit] = travel, direction = Math.sign(exit-entry);
+    const terminal = direction > 0 ? currentNodes.length-1 : 0;
+    const items = [], usedWays = new Set(leg.path.map(item => item.way_id));
+    const usedNodes = new Set(leg.path.flatMap(item => this.keptNodes(item)));
+    let stopReason = '已到达该关系当前相连部分的末端。';
+    // 中途共点的 way 保留为手动候选，不自动跨过可能的岔口。
+    const append = (wid,start,end) => {
+      this.raw({way_id:wid});
+      const nodes = this.nodes(wid), step = Math.sign(end-start);
+      const scanned = new Set(Number.isInteger(start) ? [nodes[start]] : []);
+      for (let i = step > 0 ? Math.floor(start)+1 : Math.ceil(start)-1;
+           step > 0 ? i <= end : i >= end; i += step) {
+        const node = nodes[i];
+        if (usedNodes.has(node)) {
+          stopReason = '前方接回已选轨迹或形成闭环，已停止，请手动确认。';
+          return false;
+        }
+        if (i !== end && (occurrences.get(node) || []).some(member => member.wid !== wid)) {
+          stopReason = '下一条轨道中途存在分支或重叠连接，已停在该轨道之前，请手动选择。';
+          return false;
+        }
+        // 同一 way 自身重复节点也不能自动越过。
+        if (scanned.has(node)) {
+          stopReason = '前方轨道存在闭环，已停止，请手动确认。';
+          return false;
+        }
+        scanned.add(node);
+      }
+      const item = {way_id:wid,span:[start,end]};
+      items.push(item);
+      this.keptNodes(item).forEach(node => usedNodes.add(node));
+      usedWays.add(wid);
+      return true;
+    };
+    let wid = last.way_id, node = currentNodes[exit], canContinue = true;
+    if (exit !== terminal) {
+      if (!ids.includes(wid)) throw new Error('该关系不能从当前行程前进端接续。');
+      canContinue = append(wid,exit,terminal);
+      node = currentNodes[terminal];
+    }
+    while (canContinue) {
+      const members = (occurrences.get(node) || []).filter(member => member.wid !== wid);
+      if (!members.length) break;
+      if (members.length !== 1) {
+        stopReason = '前方关系内有多个连接方向，已停止，请手动选择相连轨道。';
+        break;
+      }
+      const next = members[0], nodes = this.nodes(next.wid);
+      if (usedWays.has(next.wid)) {
+        stopReason = '前方接回已选轨道，已停止，请手动确认。';
+        break;
+      }
+      if (next.index !== 0 && next.index !== nodes.length-1) {
+        stopReason = '前方接入另一条轨道中间，方向不明确，请手动选择。';
+        break;
+      }
+      const end = next.index === 0 ? nodes.length-1 : 0;
+      if (!append(next.wid,next.index,end)) break;
+      wid = next.wid;
+      node = nodes[end];
+      if (items.length % 30 === 0) await new Promise(resolve => setTimeout(resolve,0));
+    }
+    if (!items.length) {
+      if (stopReason.includes('末端') && !ids.includes(last.way_id))
+        throw new Error('该关系不能从当前行程前进端接续。');
+      throw new Error(stopReason);
+    }
+    return {items, stop_reason:stopReason, inferred_span:inferredSpan, tracks:items.map(item => ({id:item.way_id,coords:this.coords(item),
+      reversed:item.span[1] < item.span[0],meta:this.meta(item.way_id)}))};
+  }
+  async advanceRelation(legs, wayIds) {
+    const plan = await this.relationPreview(legs, wayIds);
+    const updated = structuredClone(legs), leg = updated.at(-1);
+    if (plan.inferred_span) leg.path.at(-1).span = [...plan.inferred_span];
+    leg.path.push(...plan.items.map(item => ({...item,type:'manual'})));
+    leg.current_way = leg.path.at(-1).way_id;
+    // 只沿关系加入无歧义的前方轨道，不触发普通自动推进。
+    return this.response(updated,{...await this.choices(leg),path:plan.items.map(item => item.way_id),
+      stop_reason:plan.stop_reason,manual_confirmation_required:!plan.stop_reason.includes('末端')});
+  }
   async undo(legs) {
     const updated = structuredClone(legs);
     if (updated.length) {

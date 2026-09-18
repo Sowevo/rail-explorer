@@ -82,14 +82,14 @@ function initJourneyStart(map, options) {
       row.appendChild(actions);
       const advance = button(actions, '', begin, 'track-locate advance-choice');
       advance.innerHTML = '<i class="bi bi-chevron-double-right" aria-hidden="true"></i>';
-      advance.title = '从此方向开始，仅加入这一条轨道';
+      advance.dataset.tooltip = '从此方向开始，仅加入这一条轨道';
       advance.setAttribute('aria-label', `从 ${identity} 开始`);
       const locate = button(actions, '', () => {
         showHighlight(direction);
         map.fitBounds(direction.coords, {padding:[40,40],maxZoom:18,animate:false});
       }, 'track-locate locate-choice');
       locate.innerHTML = '<i class="bi bi-crosshair" aria-hidden="true"></i>';
-      locate.title = '查看这条候选轨道全貌';
+      locate.dataset.tooltip = '查看这条候选轨道全貌';
       locate.setAttribute('aria-label', `查看 ${identity} 全貌`);
     });
   }

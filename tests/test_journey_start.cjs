@@ -3,7 +3,7 @@ const requests=[],active=new Set(),events={};
 let changed=null, fits=0;
 let arrowLines=null;
 const previewArrows={showTracks(key,tracks){arrowLines=tracks.flatMap(track=>context.railPreviewLines(track.tags,[track.coords]));},clear(){arrowLines=null;}};
-const el=()=>({children:[],style:{},hidden:true,appendChild(child){this.children.push(child);},replaceChildren(){this.children=[];},setAttribute(){}});
+const el=()=>({children:[],dataset:{},style:{},hidden:true,appendChild(child){this.children.push(child);},replaceChildren(){this.children=[];},setAttribute(){}});
 const panel=el(),list=el();
 const map={on(name,fn){events[name]=fn;},removeLayer(layer){active.delete(layer);},fitBounds(){fits++;}};
 const layer=()=>({events:{},addTo(){active.add(this);return this;},on(name,fn){this.events[name]=fn;return this;},

@@ -31,6 +31,7 @@
       cursor: pointer;
     }
     .track-locate:hover { color: #0d6efd; }
+    .track-locate:disabled { opacity:.35; cursor:default; pointer-events:none; }
     .track-locate:focus-visible { outline: 2px solid #0d6efd; outline-offset: 2px; }
 
     body { margin: 0; padding: 0; }
@@ -57,7 +58,9 @@
     .current-track { display:grid; grid-template-columns:minmax(0, 1fr) auto; grid-template-rows:22px 44px; align-items:center; gap:4px 8px; height:70px; padding:0 9px; margin-bottom:6px; }
     .current-track[hidden], #track-card:has(#ways-list[hidden]) { display:none; }
     #current-track-heading { grid-column:1 / -1; font-size:14px; font-weight:bold; color:#333; }
-    #current-track-title { min-width:0; overflow:hidden; overflow-wrap:anywhere; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; font-size:15px; line-height:22px; color:#334155; }
+    #current-track-title { border:0; background:transparent; padding:0; text-align:left; cursor:pointer; min-width:0; overflow:hidden; overflow-wrap:anywhere; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; font-size:15px; line-height:22px; color:#334155; }
+    #current-track-title:hover { color:#0d6efd; text-decoration:underline; }
+    #current-track-title:focus-visible { outline:2px solid #0d6efd; outline-offset:2px; }
     .panel-content { flex:1; min-height:0; overflow-y:auto; padding:0 18px 18px; scrollbar-gutter:stable; }
     .journey-actions { position:relative; flex-shrink:0; padding:12px 18px; border-top:1px solid #dce2ea; background:#f5f7fa; }
     #export-status { position:absolute; bottom:calc(100% + 8px); left:18px; right:18px; width:auto; z-index:10; }
@@ -172,7 +175,7 @@
       <form id="way-form" class="mb-3">
         <div class="input-group">
           <input type="text" id="way_id" class="form-control" placeholder="输入轨道 way ID" aria-label="轨道 way ID" inputmode="numeric" pattern="[0-9]+" maxlength="100" required>
-          <button type="submit" class="btn btn-primary" title="按轨道 ID 开始探索" aria-label="按轨道 ID 开始探索"><i class="bi bi-search" aria-hidden="true"></i></button>
+          <button type="submit" class="btn btn-primary" data-tooltip="按轨道 ID 开始探索" aria-label="按轨道 ID 开始探索"><i class="bi bi-search" aria-hidden="true"></i></button>
         </div>
         <div class="form-text">右键地图查找附近轨道，或输入 ID；已有行程时追加新段。</div>
       </form>
@@ -181,11 +184,11 @@
       <div id="track-card">
         <div id="current-track-row" class="current-track" hidden>
           <div id="current-track-heading"></div>
-          <div id="current-track-title"></div>
+          <button id="current-track-title" type="button" aria-controls="element-detail" data-tooltip="查看当前轨道及所属关系"></button>
           <span id="current-track-actions" hidden>
             <span class="choice-actions">
-              <button id="undo-way" class="track-locate" type="button" title="退回一条轨道" aria-label="退回一条轨道"><i class="bi bi-chevron-double-left" aria-hidden="true"></i></button>
-              <button id="fit-choices" class="track-locate" type="button" title="显示当前轨道与相连候选" aria-label="显示当前轨道与相连候选"><i class="bi bi-crosshair" aria-hidden="true"></i></button>
+              <button id="undo-way" class="track-locate" type="button" data-tooltip="退回一条轨道" aria-label="退回一条轨道"><i class="bi bi-chevron-double-left" aria-hidden="true"></i></button>
+              <button id="fit-choices" class="track-locate" type="button" data-tooltip="显示当前轨道与相连候选" aria-label="显示当前轨道与相连候选"><i class="bi bi-crosshair" aria-hidden="true"></i></button>
             </span>
           </span>
         </div>
@@ -201,9 +204,9 @@
       </div>
       <div id="journey-actions" class="journey-actions" hidden>
         <div class="export-actions">
-          <select id="export-scope" class="form-select form-select-sm" aria-label="导出范围" title="选择导出范围"><option value="all">全部行程</option></select>
-          <button id="download-kml" type="button" class="btn btn-primary btn-sm" title="下载 KML" aria-label="下载 KML"><i class="bi bi-download me-1" aria-hidden="true"></i>下载 KML</button>
-          <button id="clear-journey" class="btn btn-outline-danger btn-sm" type="button" title="清空全部行程" aria-label="清空全部行程"><i class="bi bi-trash me-1" aria-hidden="true"></i>清空</button>
+          <select id="export-scope" class="form-select form-select-sm" aria-label="导出范围" data-tooltip="选择导出范围"><option value="all">全部行程</option></select>
+          <button id="download-kml" type="button" class="btn btn-primary btn-sm" data-tooltip="下载 KML" aria-label="下载 KML"><i class="bi bi-download me-1" aria-hidden="true"></i>下载 KML</button>
+          <button id="clear-journey" class="btn btn-outline-danger btn-sm" type="button" data-tooltip="清空全部行程" aria-label="清空全部行程"><i class="bi bi-trash me-1" aria-hidden="true"></i>清空</button>
           <button id="more-actions-button" type="button" class="btn btn-outline-secondary btn-sm" popovertarget="more-actions" aria-expanded="false">更多 <i class="bi bi-three-dots" aria-hidden="true"></i></button>
         </div>
         <div id="export-status" class="toast" role="status" aria-live="polite" aria-atomic="true">
@@ -257,6 +260,7 @@
   </dialog>
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="{{ url_for('static', filename='instant_tooltips.js') }}"></script>
   <script src="{{ url_for('static', filename='track_styles.js') }}"></script>
   <script src="{{ url_for('static', filename='journey_export.js') }}"></script>
   <script src="{{ url_for('static', filename='journey_engine.js') }}"></script>
@@ -267,13 +271,14 @@
   <script src="{{ url_for('static', filename='choice_viewport.js') }}"></script>
   <script src="{{ url_for('static', filename='station_map.js') }}"></script>
   <script>
+    initInstantTooltips();
     const initialBounds = {{ map_bounds | tojson }};
     let map = L.map('map');
     map.zoomControl.getContainer().querySelector('.leaflet-control-zoom-in').innerHTML = '<i class="bi bi-plus-lg" aria-hidden="true"></i>';
     map.zoomControl.getContainer().querySelector('.leaflet-control-zoom-out').innerHTML = '<i class="bi bi-dash-lg" aria-hidden="true"></i>';
     for (const [selector, label] of [['.leaflet-control-zoom-in', '放大地图'], ['.leaflet-control-zoom-out', '缩小地图']]) {
       const button = map.zoomControl.getContainer().querySelector(selector);
-      button.title = label;
+      button.dataset.tooltip = label;
       button.setAttribute('aria-label', label);
     }
     if (initialBounds) {
@@ -309,7 +314,7 @@
         const box = L.DomUtil.create('div', 'place-search');
         box.innerHTML = '<form id="place-form"><div class="input-group input-group-sm">' +
           '<input id="place-query" class="form-control" aria-label="搜索地点" placeholder="城市、车站、机场或地址" maxlength="200" autocomplete="off" required>' +
-          '<button class="btn btn-primary" type="submit" title="搜索地点" aria-label="搜索地点"><i class="bi bi-search" aria-hidden="true"></i></button></div></form>' +
+          '<button class="btn btn-primary" type="submit" data-tooltip="搜索地点" aria-label="搜索地点"><i class="bi bi-search" aria-hidden="true"></i></button></div></form>' +
           '<div id="place-history" hidden></div>' +
           '<div id="place-status" class="small mt-1" role="status" aria-live="polite"></div>' +
           '<div id="place-results" class="place-search-results list-group mt-1"></div>';
@@ -471,7 +476,7 @@
     fitAllButton.hidden = true;
     map.zoomControl.getContainer().classList.add('no-journey');
     fitAllButton.href = '#';
-    fitAllButton.title = '查看全部行程';
+    fitAllButton.dataset.tooltip = '查看全部行程';
     fitAllButton.setAttribute('role', 'button');
     fitAllButton.setAttribute('aria-label', '查看全部行程');
     fitAllButton.style.fontSize = '18px';
@@ -536,8 +541,8 @@
       lastData = data;
       const hasJourney = data.total_path_coords.length > 0;
       const submit = document.querySelector('#way-form button[type="submit"]');
-      submit.title = hasJourney ? '按轨道 ID 添加下一段' : '按轨道 ID 开始探索';
-      submit.setAttribute('aria-label', submit.title);
+      submit.dataset.tooltip = hasJourney ? '按轨道 ID 添加下一段' : '按轨道 ID 开始探索';
+      submit.setAttribute('aria-label', submit.dataset.tooltip);
       fitAllButton.hidden = !hasJourney;
       map.zoomControl.getContainer().classList.toggle('no-journey', !hasJourney);
       blueLayers.forEach(layer => map.removeLayer(layer));
@@ -571,7 +576,8 @@
       const title = document.getElementById('current-track-title');
       const currentName = data.total_path_coords.at(-1)?.meta?.tags?.name || '未命名';
       title.textContent = data.legs.length ? `${data.current_way}（${currentName}）` : '';
-      title.title = title.textContent;
+      title.dataset.tooltip = `${title.textContent} · 查看所属关系`;
+      title.setAttribute('aria-label', title.dataset.tooltip);
       document.getElementById('current-track-row').hidden = !data.legs.length;
       document.getElementById('current-track-actions').hidden = !data.legs.length;
       let html = '<b>可选相连轨道:</b>';
@@ -587,14 +593,14 @@
         }
         html += '<ul class="list-group mt-2">' + sortedChoices.map(w => {
           let name = w.meta && w.meta.tags && w.meta.tags.name ? `（${w.meta.tags.name}）` : '（未命名）';
-          let star = w.recommend ? '<span class="star" title="推荐接续轨道" aria-label="推荐接续轨道">⭐</span>' : '';
+          let star = w.recommend ? '<span class="star" data-tooltip="推荐接续轨道" aria-label="推荐接续轨道">⭐</span>' : '';
           let liClass = w.recommend ? 'list-group-item active-choice' : 'list-group-item';
           return `<li class='${liClass}' style='margin-bottom:2px;list-style-type:disc;'><button type="button" class="choice-way" data-wayid="${w.id}">${w.id}${name}${star}</button>
             <span class="choice-actions">
             <button type="button" class="track-locate advance-choice" data-wayid="${w.id}"
-              title="只前进这一条轨道" aria-label="只前进轨道 ${w.id}"><i class="bi bi-chevron-double-right" aria-hidden="true"></i></button>
+              data-tooltip="只前进这一条轨道" aria-label="只前进轨道 ${w.id}"><i class="bi bi-chevron-double-right" aria-hidden="true"></i></button>
             <button type="button" class="track-locate locate-choice" data-wayid="${w.id}"
-              title="查看这条候选轨道全貌" aria-label="查看候选轨道 ${w.id} 全貌"><i class="bi bi-crosshair" aria-hidden="true"></i></button></span></li>`;
+              data-tooltip="查看这条候选轨道全貌" aria-label="查看候选轨道 ${w.id} 全貌"><i class="bi bi-crosshair" aria-hidden="true"></i></button></span></li>`;
         }).join('') + '</ul>';
       }
       list.innerHTML = html;
@@ -633,7 +639,7 @@
     function updateUndoButton() {
       const button = document.getElementById('undo-way');
       button.disabled = trackActionPending || !lastData?.legs?.length;
-      button.title = '移除末尾一条轨道（截断后移除保留部分）';
+      button.dataset.tooltip = '移除末尾一条轨道（截断后移除保留部分）';
       button.setAttribute('aria-label', '退回一条轨道');
     }
 
@@ -875,7 +881,7 @@
       const data = await fetchWays(way_id, reset, options);
       clearNearbyQuery();
       clearPreview();
-      document.getElementById('element-detail').replaceChildren();
+      clearElementDetail();
       renderWays(data);
       if (data.manual_confirmation_required) document.getElementById('query-status').textContent = data.stop_reason;
       return data;
@@ -890,7 +896,7 @@
       const status = document.getElementById('query-status');
       status.classList.remove('text-danger');
       status.textContent = '加载中…';
-      document.querySelectorAll('#way-form input, #way-form button, #ways-list button, #query-results button, #element-detail button, #element-detail select, #undo-way, #clear-journey').forEach(el => el.disabled = true);
+      document.querySelectorAll('#way-form input, #way-form button, #ways-list button, #query-results button, #element-detail button, #element-detail select, #undo-way, #clear-journey, #current-track-title').forEach(el => el.disabled = true);
       try {
         await action();
         if (status.textContent === '加载中…') status.textContent = '';
@@ -899,7 +905,7 @@
         status.textContent = error.message || '请求失败，请重试。';
       } finally {
         trackActionPending = false;
-        document.querySelectorAll('#way-form input, #way-form button, #ways-list button, #query-results button, #element-detail button, #element-detail select, #undo-way, #clear-journey').forEach(el => el.disabled = false);
+        document.querySelectorAll('#way-form input, #way-form button, #ways-list button, #query-results button, #element-detail button, #element-detail select, #undo-way, #clear-journey, #current-track-title').forEach(el => el.disabled = Boolean(el.dataset.disabledReason));
         updateUndoButton();
       }
     }
@@ -908,12 +914,10 @@
     let queryMarker = null;
     let queryCircle = null;
     let previewLayer = null;
+    let relationHoverOwner = null;
 
     function clearQueryResults() {
       const container = document.getElementById('query-results');
-      container.querySelectorAll('.rail-type-icon').forEach(icon => {
-        bootstrap.Tooltip.getInstance(icon)?.dispose();
-      });
       container.replaceChildren();
     }
 
@@ -927,9 +931,92 @@
     }
 
     function clearPreview() {
+      relationHoverOwner = null;
       previewArrows.clear('nearby');
       if (previewLayer) map.removeLayer(previewLayer);
       previewLayer = null;
+    }
+
+    function clearElementDetail() {
+      const panel = document.getElementById('element-detail');
+      panel.replaceChildren();
+    }
+
+    function drawNearbyTracks(tracks) {
+      clearPreview();
+      previewLayer = L.featureGroup(tracks.map(track =>
+        L.polyline(track.coords, TRACK_STYLES.preview))).addTo(map);
+      previewArrows.showTracks('nearby', tracks);
+    }
+
+    function drawElementPreview(data) {
+      drawNearbyTracks(data.geometry.map((coords,index) => ({coords,meta:data.geometry_meta[index]})));
+      const direction = data.type === 'way' ? railPreviewDirection(data.tags) : null;
+      if (direction) previewLayer.bindTooltip(`箭头：${direction.label}`);
+    }
+
+    async function prepareRelationAdvance(data, anchorWay) {
+      const button = document.querySelector(`#element-detail button[data-relation-advance="${data.id}"]`);
+      if (!button) return;
+      document.querySelectorAll('#element-detail button[data-relation-advance]').forEach(other => {
+        other.relationPreview = null;
+        other.dataset.disabledReason = '请先点击关系名称检查连续轨道。';
+        other.disabled = true;
+      });
+      button.dataset.disabledReason = '正在检查连续轨道…';
+      const snapshot = lastData;
+      try {
+        const plan = await journeyApi.relationPreview({relation_id:data.id,anchor_way:anchorWay});
+        if (!button.isConnected || lastData !== snapshot) return;
+        button.relationPreview = {plan,data,revision:lastData?.revision ?? 0};
+        delete button.dataset.disabledReason;
+        button.disabled = trackActionPending;
+      } catch (error) {
+        if (!button.isConnected || lastData !== snapshot) return;
+        button.dataset.disabledReason = error.message;
+      }
+    }
+
+    function relationAdvanceButton(item, anchorWay) {
+      const wrapper = document.createElement('span');
+      wrapper.className = 'd-inline-flex';
+      wrapper.tabIndex = 0;
+      wrapper.dataset.relationTip = '';
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'track-locate';
+      button.dataset.relationAdvance = item.id;
+      button.dataset.disabledReason = '请先点击关系名称检查连续轨道。';
+      button.disabled = true;
+      button.setAttribute('aria-label', '沿此关系继续');
+      button.innerHTML = '<i class="bi bi-chevron-double-right" aria-hidden="true"></i>';
+      wrapper.appendChild(button);
+      wrapper.dataset.tooltip = '沿此关系继续，遇到分支停下';
+      wrapper.tooltipText = () => button.dataset.disabledReason || wrapper.dataset.tooltip;
+      const hidePreview = () => {
+        if (relationHoverOwner !== button) return;
+        const cached = button.relationPreview;
+        if (cached && cached.revision === lastData?.revision) drawElementPreview(cached.data);
+        else clearPreview();
+      };
+      wrapper.onmouseenter = wrapper.onfocusin = () => {
+        const cached = button.relationPreview;
+        if (!cached || button.disabled || trackActionPending || cached.revision !== lastData?.revision) return;
+        drawNearbyTracks(cached.plan.tracks);
+        relationHoverOwner = button;
+      };
+      wrapper.onmouseleave = wrapper.onfocusout = hidePreview;
+      button.onclick = () => runTrackAction(async () => {
+        hidePreview();
+        const cached = button.relationPreview;
+        if (!cached || button.dataset.disabledReason) throw new Error(button.dataset.disabledReason || '请重新选择关系。');
+        const data = await journeyApi.advanceRelation({relation_id:item.id,anchor_way:anchorWay,revision:cached.revision});
+        clearNearbyQuery();
+        clearPreview();
+        clearElementDetail();
+        renderWays(data);
+      });
+      return wrapper;
     }
 
     function elementTitle(item) {
@@ -953,8 +1040,8 @@
       start.type = 'button';
       start.className = 'track-locate';
       start.innerHTML = '<i class="bi bi-chevron-double-right" aria-hidden="true"></i>';
-      start.title = lastData?.legs?.length ? '作为下一段继续' : '从此轨道开始探索';
-      start.setAttribute('aria-label', start.title);
+      start.dataset.tooltip = lastData?.legs?.length ? '作为下一段继续' : '从此轨道开始探索';
+      start.setAttribute('aria-label', start.dataset.tooltip);
       start.onclick = () => runTrackAction(async () => {
         const hasJourney = Boolean(lastData?.legs?.length);
         await selectWay(id, !hasJourney, {transfer:hasJourney});
@@ -964,8 +1051,8 @@
       zoom.type = 'button';
       zoom.className = 'track-locate';
       zoom.innerHTML = '<i class="bi bi-crosshair" aria-hidden="true"></i>';
-      zoom.title = '缩放到此轨道';
-      zoom.setAttribute('aria-label', zoom.title);
+      zoom.dataset.tooltip = '缩放到此轨道';
+      zoom.setAttribute('aria-label', zoom.dataset.tooltip);
       zoom.onclick = () => runTrackAction(async () => {
         await showElement('way', id);
         if (previewLayer && previewLayer.getBounds().isValid()) {
@@ -987,10 +1074,7 @@
       if (item.type === 'way' && typeNames[item.railway]) {
         const icon = document.createElement('span');
         icon.className = `rail-type-icon rail-type-${item.railway} me-1`;
-        new bootstrap.Tooltip(icon, {
-          title: typeNames[item.railway], trigger: 'hover focus',
-          container: 'body', delay: 0, animation: false
-        });
+        icon.dataset.tooltip = typeNames[item.railway];
         icon.setAttribute('role', 'img');
         icon.setAttribute('aria-label', typeNames[item.railway]);
         title.appendChild(icon);
@@ -1033,23 +1117,27 @@
       zoom.type = 'button';
       zoom.className = 'track-locate flex-shrink-0';
       zoom.innerHTML = '<i class="bi bi-crosshair" aria-hidden="true"></i>';
-      zoom.title = '缩放到此关系';
-      zoom.setAttribute('aria-label', zoom.title);
+      zoom.dataset.tooltip = '缩放到此关系';
+      zoom.setAttribute('aria-label', zoom.dataset.tooltip);
       zoom.onclick = () => runTrackAction(async () => {
         await showElement(item.type, item.id, {anchorWay, previewOnly:true});
         if (previewLayer && previewLayer.getBounds().isValid()) {
           map.fitBounds(previewLayer.getBounds(), {padding:[25,25], maxZoom:18});
         }
       });
-      row.append(button, zoom);
+      const actions = document.createElement('div');
+      actions.className = 'nearby-way-actions';
+      if (anchorWay !== null) actions.appendChild(relationAdvanceButton(item, anchorWay));
+      actions.appendChild(zoom);
+      row.append(button, actions);
       return row;
     }
 
-    async function showElement(kind, id, {anchorWay = null, full = false, previewOnly = false} = {}) {
+    async function showElement(kind, id, {anchorWay = null, full = false, previewOnly = false, currentTrack = false} = {}) {
       const scopeQuery = kind === 'relation' && anchorWay !== null
         ? `?anchor_way=${encodeURIComponent(anchorWay)}&full=${full ? 1 : 0}` : '';
       const data = await journeyApi.read(`/elements/${kind}/${id}${scopeQuery}`);
-      if (kind === 'way') selectedStartWay = Number(id);
+      if (kind === 'way') selectedStartWay = currentTrack ? null : Number(id);
       // 继续查看关系时保留附近列表中选中的轨道。
       document.querySelectorAll('#query-results button[data-element-type]').forEach(button => {
         if (button.dataset.elementType !== kind) return;
@@ -1058,16 +1146,7 @@
         selectedRow.classList.toggle('nearby-selected', selected);
         button.setAttribute('aria-pressed', String(selected));
       });
-      clearPreview();
-      previewLayer = L.featureGroup(data.geometry.map(coords =>
-        L.polyline(coords, TRACK_STYLES.preview))).addTo(map);
-      const previewDirection = kind === 'way' ? railPreviewDirection(data.tags) : null;
-      previewArrows.showTracks('nearby', data.geometry.map((coords, index) => ({
-        coords, meta:data.geometry_meta[index]
-      })));
-      if (previewDirection) {
-        previewLayer.bindTooltip(`箭头：${previewDirection.label}`);
-      }
+      drawElementPreview(data);
       if (previewOnly) {
         document.querySelectorAll('#element-detail button[data-element-type="relation"]').forEach(button => {
           const selected = button.dataset.elementId === String(id);
@@ -1075,10 +1154,11 @@
           selectedRow.classList.toggle('nearby-selected', selected);
           button.setAttribute('aria-pressed', String(selected));
         });
+        await prepareRelationAdvance(data, anchorWay);
         return;
       }
       const panel = document.getElementById('element-detail');
-      panel.replaceChildren();
+      clearElementDetail();
       const heading = document.createElement('h6');
       heading.className = 'd-flex align-items-center gap-1';
       const headingText = document.createElement('span');
@@ -1091,12 +1171,12 @@
         zoom.type = 'button';
         zoom.className = 'track-locate flex-shrink-0';
         zoom.innerHTML = '<i class="bi bi-crosshair" aria-hidden="true"></i>';
-        zoom.title = '缩放到此要素';
-        zoom.setAttribute('aria-label', zoom.title);
+        zoom.dataset.tooltip = '缩放到此要素';
+        zoom.setAttribute('aria-label', zoom.dataset.tooltip);
         zoom.disabled = !data.geometry.length;
         zoom.onclick = () => { if (previewLayer && previewLayer.getBounds().isValid()) map.fitBounds(previewLayer.getBounds(), {padding:[25,25], maxZoom:18}); };
         heading.appendChild(zoom);
-      } else if (!document.querySelector(`#query-results button[data-element-type="way"][data-element-id="${Number(id)}"]`)) {
+      } else if (!currentTrack && !document.querySelector(`#query-results button[data-element-type="way"][data-element-id="${Number(id)}"]`)) {
         // 从关系成员进入的轨道可能不在附近列表中，沿用同一组图标提供操作。
         heading.appendChild(wayActions(id));
       }
@@ -1114,7 +1194,7 @@
         label.innerHTML = '<i class="bi bi-funnel me-1" aria-hidden="true"></i>';
         label.append(full ? `完整关系 · ${data.scope.total} 条轨道`
           : `仅显示相连轨道 · 已隐藏 ${data.scope.hidden} 条`);
-        label.title = `以轨道 ${data.scope.anchor_way} 为起点，仅沿此关系内的共享节点筛选；原始成员和标签不变。`;
+        label.dataset.tooltip = `以轨道 ${data.scope.anchor_way} 为起点，仅沿此关系内的共享节点筛选；原始成员和标签不变。`;
         const toggle = document.createElement('button');
         toggle.type = 'button';
         toggle.className = 'btn btn-link btn-sm p-0 ms-auto';
@@ -1175,7 +1255,7 @@
     async function queryNearby(latlng, radius) {
       selectedStartWay = null;
       clearPreview();
-      document.getElementById('element-detail').replaceChildren();
+      clearElementDetail();
       const container = document.getElementById('query-results');
       clearQueryResults();
       if (queryMarker) map.removeLayer(queryMarker);
@@ -1338,7 +1418,7 @@
       onChanged: data => {
         clearNearbyQuery();
         clearPreview();
-        document.getElementById('element-detail').replaceChildren();
+        clearElementDetail();
         document.getElementById('way_id').value = data.current_way || '';
         renderWays(data, true);
       }
@@ -1358,7 +1438,7 @@
       clearReference: () => {
         clearPreview();
         clearNearbyQuery();
-        document.getElementById('element-detail').replaceChildren();
+        clearElementDetail();
       },
       onChanged: data => {
         document.getElementById('way_id').value = data.current_way || '';
@@ -1372,7 +1452,7 @@
       stationMap.refresh();
       clearPreview();
       clearNearbyQuery();
-      document.getElementById('element-detail').replaceChildren();
+      clearElementDetail();
       document.getElementById('way_id').value = '';
       renderWays(data, true);
     });
@@ -1380,12 +1460,17 @@
     const stepJourney = (action, wayId) => runTrackAction(async () => {
       const data = await journeyApi[action](wayId === undefined ? {} : {way_id:Number(wayId)});
       clearNearbyQuery();
-      document.getElementById('element-detail').replaceChildren();
+      clearElementDetail();
       clearPreview();
       document.getElementById('way_id').value = data.current_way || '';
       // 单步进退只更新轨迹，保留用户正在查看的地图范围。
       renderWays(data, true);
     });
+    document.getElementById('current-track-title').onclick = () => runTrackAction(async () => {
+      if (!lastData?.current_way) return;
+      await showElement('way', lastData.current_way, {currentTrack:true});
+    });
+
     const undoButton = document.getElementById('undo-way');
     undoButton.onclick = () => stepJourney('undo');
     ['mouseenter', 'mouseleave', 'focus', 'blur'].forEach(event =>

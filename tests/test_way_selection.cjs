@@ -14,7 +14,7 @@ assert.ok(begin>=0 && end>begin);
       calls.push(args);
       if(calls.length>1) throw new Error('页面不应自行请求第二条轨道');
       return response;
-    },clearNearbyQuery(){},clearPreview(){},
+    },clearNearbyQuery(){},clearPreview(){},clearElementDetail(){},
     document:{getElementById:()=>({replaceChildren(){}})},
     renderWays:data=>{rendered=data;}};
     vm.createContext(context);

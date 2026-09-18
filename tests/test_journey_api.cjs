@@ -8,6 +8,11 @@ global.fetch=async(url,options={})=>{
   requests.push({url,body,options});
   if(url==='/diagnostics')return {ok:true,json:async()=>({ok:true})};
   if(url.startsWith('/dataset'))return {ok:true,json:async()=>({dataset_version:version})};
+  if(url.startsWith('/elements/relation/')) {
+    if(new URL(url,'http://localhost').searchParams.get('dataset_version')!==version)
+      return {ok:false,json:async()=>({code:'dataset_changed',dataset_version:version})};
+    return {ok:true,json:async()=>({ways:[{id:1},{id:2},{id:3}]})};
+  }
   if(body.dataset_version!==version)return {ok:false,json:async()=>({code:'dataset_changed',dataset_version:version})};
   if(waitTrack)await waitTrack;
   if(body.way_ids.includes(failId))throw new Error('模拟网络失败');
@@ -77,4 +82,25 @@ test('重复修改拒绝；预览和版本过期结果丢弃',async()=>{
   resume();waitTrack=null;
   await assert.rejects(preview,/过期/);
   assert.equal(p.data.legs.length,0);assert.equal(p.api.blocked,false);
+});
+
+test('关系预览不修改行程；整组加入复查版本与修订号，不传整段行程',async()=>{
+ requests=[];const p=page();
+ p.data=await p.api.advance({way_id:1});
+ const endpointPlan=await p.api.relationPreview({relation_id:10,anchor_way:1});
+ assert.deepEqual(endpointPlan.items.map(item=>item.way_id),[2,3]);
+ p.data=await p.api.forward({way_id:2});
+ const before=p.data;
+ const plan=await p.api.relationPreview({relation_id:10,anchor_way:1});
+ assert.equal(p.data,before);assert.equal(plan.revision,before.revision);
+ assert.deepEqual(plan.items.map(item=>item.way_id),[3]);
+ await assert.rejects(p.api.advanceRelation({relation_id:10,anchor_way:1,revision:plan.revision-1}),/行程已变化/);
+ p.data=await p.api.advanceRelation({relation_id:10,anchor_way:1,revision:plan.revision});
+ assert.equal(p.data.current_way,3);assert.equal(p.data.legs.length,1);
+ assert.equal(p.data.revision,plan.revision+1);
+ for(const r of requests){assert.ok(!('legs' in r.body));assert.ok(!('path' in r.body));}
+ const q=page();q.data=await q.api.advance({way_id:1});q.data=await q.api.forward({way_id:2});
+ const old=q.data;version+='-changed';
+ await assert.rejects(q.api.advanceRelation({relation_id:10,anchor_way:1,revision:old.revision}),/数据源已切换/);
+ assert.equal(q.data,old);
 });
