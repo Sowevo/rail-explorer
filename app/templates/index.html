@@ -14,6 +14,17 @@
       border-radius: 0 0 4px 4px;
     }
 
+    #kml-dialog { width:400px; max-width:90vw; border:1px solid #dee2e6; border-radius:12px; padding:20px; box-shadow:0 12px 40px #0002; }
+    .station-picker { position:relative; }
+    .station-picker > .form-control { padding-right:40px; border-radius:8px; }
+    .station-picker-toggle { position:absolute; right:1px; top:1px; width:36px; height:36px; border:0; border-radius:0 7px 7px 0; color:#64748b; }
+    .station-picker-toggle:hover, .station-picker-toggle[aria-expanded="true"] { color:#0d6efd; background:#eef4ff; }
+    .station-picker > .dropdown-menu { padding:4px; max-height:min(260px, 40vh); overflow-y:auto; border-radius:8px; border-color:#dee2e6; box-shadow:0 3px 12px #0001; }
+    .station-picker .dropdown-item { padding:8px 10px; border-radius:5px; }
+    .station-picker .dropdown-item > div { font-weight:500; }
+    .station-picker .dropdown-item > small { font-size:12px; }
+    .station-picker .dropdown-item:active > small { color:inherit !important; }
+
     .track-locate {
       display: inline-flex;
       align-items: center;
@@ -245,14 +256,13 @@
     <p class="small">行程含截断轨道，请直接导出 KML 保留准确终点；Overpass 查询仍返回完整 way。</p>
     <form method="dialog" class="text-end"><button class="btn btn-primary btn-sm">知道了</button></form>
   </dialog>
-  <dialog id="kml-dialog" class="border rounded p-3" style="width:360px;max-width:90vw;">
+  <dialog id="kml-dialog" aria-labelledby="kml-title">
     <form id="kml-form">
-      <div class="fw-bold mb-2">导出 KML</div>
+      <div id="kml-title" class="fw-bold mb-3">导出 KML</div>
       <div id="kml-stations"></div>
       <div class="small text-muted mb-2">按本地轨道关联车站命名。可修改站名；换乘站重复时，可删除多余的一项。</div>
       <div id="kml-station-status" class="small mb-2" role="status"></div>
       <div class="d-flex gap-2">
-        <button id="kml-swap" type="button" class="btn btn-outline-secondary btn-sm">反转站名顺序</button>
         <button id="kml-cancel" type="button" class="btn btn-outline-secondary btn-sm">取消</button>
         <button type="submit" class="btn btn-primary btn-sm">下载</button>
       </div>
@@ -264,6 +274,8 @@
   <script src="{{ url_for('static', filename='track_styles.js') }}"></script>
   <script src="{{ url_for('static', filename='journey_export.js') }}"></script>
   <script src="{{ url_for('static', filename='journey_engine.js') }}"></script>
+  <script src="{{ url_for('static', filename='journey_connect.js') }}"></script>
+  <script src="{{ url_for('static', filename='journey_connect_ui.js') }}"></script>
   <script src="{{ url_for('static', filename='journey_api.js') }}"></script>
   <script src="{{ url_for('static', filename='journey_cut.js') }}"></script>
   <script src="{{ url_for('static', filename='preview_arrows.js') }}"></script>
@@ -698,16 +710,14 @@
     const kmlStations = document.getElementById('kml-stations');
     let kmlDraft = null;
     let stationRequest = null;
-    kmlDialog.onclose = () => { stationRequest?.abort(); kmlDraft = null; };
-    document.getElementById('kml-cancel').onclick = () => kmlDialog.close();
-    document.getElementById('kml-swap').onclick = () => {
-      const rows = [...kmlStations.children].reverse();
-      rows.forEach((row, index) => {
-        row.querySelector('input').dataset.edited = 'yes';
-        row.querySelector('label').textContent = index === 0 ? '起点站' : index === rows.length - 1 ? '终点站' : '换乘站';
-        kmlStations.appendChild(row);
+    kmlDialog.onclose = () => {
+      stationRequest?.abort();
+      kmlStations.querySelectorAll('[data-bs-toggle="dropdown"]').forEach(toggle => {
+        bootstrap.Dropdown.getInstance(toggle)?.dispose();
       });
+      kmlDraft = null;
     };
+    document.getElementById('kml-cancel').onclick = () => kmlDialog.close();
     document.getElementById('download-kml').onclick = async () => {
       if (!lastData?.legs?.length) return;
       const scope = document.getElementById('export-scope').value;
@@ -716,9 +726,9 @@
       kmlStations.replaceChildren();
       const rows = endpoints.map((endpoint, index) => {
         const row = document.createElement('div');
-        row.className = 'mb-2';
+        row.className = 'mb-3';
         const label = document.createElement('label');
-        label.className = 'small';
+        label.className = 'small fw-semibold mb-1';
         label.textContent = index === 0 ? '起点站' : index === endpoints.length - 1 ? '终点站'
           : `换乘 ${Math.ceil(index / 2)} · ${index % 2 ? '到达站' : '出发站'}`;
         const input = document.createElement('input');
@@ -728,23 +738,47 @@
         input.className = 'form-control';
         input.maxLength = 60;
         input.required = true;
-        input.oninput = () => { input.dataset.edited = 'yes'; };
-        const list = document.createElement('datalist');
+        input.autocomplete = 'off';
+        input.oninput = () => { input.dataset.edited = 'yes'; hint.textContent = '手动填写'; };
+        const picker = document.createElement('div');
+        picker.className = 'dropdown station-picker';
+        const toggle = document.createElement('button');
+        toggle.type = 'button';
+        toggle.id = `station-options-toggle-${index}`;
+        toggle.className = 'btn station-picker-toggle';
+        toggle.innerHTML = '<i class="bi bi-chevron-down" aria-hidden="true"></i>';
+        toggle.dataset.bsToggle = 'dropdown';
+        toggle.setAttribute('aria-expanded', 'false');
+        toggle.setAttribute('aria-controls', `station-options-${index}`);
+        toggle.setAttribute('aria-label', `${label.textContent}候选车站`);
+        toggle.disabled = true;
+        const list = document.createElement('ul');
         list.id = `station-options-${index}`;
-        input.setAttribute('list', list.id);
+        list.className = 'dropdown-menu';
+        list.setAttribute('aria-labelledby', toggle.id);
+        picker.append(input, toggle, list);
+        // 浮层以整个输入框定位，不参与弹窗布局；固定定位避免被弹窗滚动区域裁切。
+        new bootstrap.Dropdown(toggle, {
+          reference: picker,
+          boundary: 'viewport',
+          popperConfig: config => ({...config, strategy:'fixed'}),
+        });
+        toggle.addEventListener('show.bs.dropdown', () => {
+          list.style.width = `${picker.getBoundingClientRect().width}px`;
+        });
         const hint = document.createElement('div');
-        hint.className = 'small text-muted';
-        row.append(label, input, list, hint);
+        hint.className = 'small text-muted mt-1';
+        row.append(label, picker, hint);
         if (index > 0 && index < endpoints.length - 1) {
           const remove = document.createElement('button');
           remove.type = 'button';
           remove.className = 'btn btn-link btn-sm p-0';
           remove.textContent = '删除此项';
-          remove.onclick = () => row.remove();
+          remove.onclick = () => { bootstrap.Dropdown.getInstance(toggle)?.dispose(); row.remove(); };
           row.appendChild(remove);
         }
         kmlStations.appendChild(row);
-        return {row, input, list, hint, label};
+        return {row, input, list, hint, label, toggle};
       });
       const status = document.getElementById('kml-station-status');
       status.textContent = '正在读取本地关联车站…';
@@ -756,9 +790,30 @@
         if (!endpoints.length) throw new Error('没有可查询的轨迹端点。');
         const data = await journeyApi.postData('/stations/nearby', {endpoints}, {signal:controller.signal});
         if (controller.signal.aborted || !kmlDialog.open) return;
-        rows.forEach(({input, list, hint}, index) => {
+        rows.forEach(({input, list, hint, toggle}, index) => {
           const candidates = data.stations[index];
-          candidates.forEach(station => list.appendChild(new Option(`${station.name} · ${station.source} · ${station.distance} 米`, station.name)));
+          candidates.forEach(station => {
+            const item = document.createElement('li');
+            const option = document.createElement('button');
+            option.type = 'button';
+            option.className = 'dropdown-item text-wrap';
+            const name = document.createElement('div');
+            name.textContent = station.name;
+            const detail = document.createElement('small');
+            detail.className = 'text-muted';
+            detail.textContent = `${station.source} · ${station.distance} 米`;
+            option.append(name, detail);
+            option.onclick = () => {
+              input.value = station.name;
+              input.dataset.edited = 'yes';
+              hint.textContent = detail.textContent;
+              bootstrap.Dropdown.getOrCreateInstance(toggle).hide();
+              input.focus();
+            };
+            item.appendChild(option);
+            list.appendChild(item);
+          });
+          toggle.disabled = candidates.length === 0;
           if (!input.dataset.edited) {
             input.value = candidates[0]?.name || '';
             hint.textContent = candidates[0] ? `${candidates[0].source} · ${candidates[0].distance} 米` : '未找到站名，请手动填写';
@@ -772,6 +827,7 @@
             rows[i].input.value = a.name;
             rows[i].label.textContent = `换乘 ${Math.ceil(i / 2)}`;
             rows[i].hint.textContent = '同一车站，已合并';
+            bootstrap.Dropdown.getInstance(rows[i + 1].toggle)?.dispose();
             rows[i + 1].row.remove();
           }
         }
@@ -888,8 +944,9 @@
     }
 
     let trackActionPending = false;
-    async function runTrackAction(action, {keepStart = false} = {}) {
+    async function runTrackAction(action, {keepStart = false, keepConnect = false} = {}) {
       if (trackActionPending) return;
+      if (!keepConnect) connectControl?.cancel();
       cutControl?.cancel();
       if (!keepStart) startControl?.cancel();
       trackActionPending = true;
@@ -1059,6 +1116,15 @@
           map.fitBounds(previewLayer.getBounds(), {padding:[25,25], maxZoom:18});
         }
       });
+      if (lastData?.legs?.length && !lastData.legs.at(-1).path.some(item => item.way_id === Number(id))) {
+        const connect = document.createElement('button');
+        connect.type = 'button'; connect.className = 'track-locate';
+        connect.innerHTML = '<i class="bi bi-link-45deg" aria-hidden="true"></i>';
+        connect.dataset.tooltip = '连接到此轨道，继续当前段';
+        connect.setAttribute('aria-label',connect.dataset.tooltip);
+        connect.onclick = () => connectControl.open(Number(id));
+        actions.appendChild(connect);
+      }
       actions.append(start, zoom);
       return actions;
     }
@@ -1219,18 +1285,6 @@
       }
       membershipSection.append(membershipTitle, memberships);
       panel.appendChild(membershipSection);
-      const tags = document.createElement('details');
-      const caption = document.createElement('summary');
-      caption.textContent = '原始标签';
-      const table = document.createElement('table');
-      table.className = 'table table-sm small';
-      Object.entries(data.tags).forEach(([key, value]) => {
-        const row = table.insertRow();
-        row.insertCell().textContent = key;
-        row.insertCell().textContent = value;
-      });
-      tags.append(caption, table);
-      panel.appendChild(tags);
       if (kind === 'relation') {
         const note = document.createElement('p');
         note.className = 'small text-muted';
@@ -1250,6 +1304,22 @@
         panel.append(note, members);
       }
       document.getElementById('query-status').textContent = `已高亮${elementTitle(data)}。`;
+    }
+
+    function sortNearbyWays(ways) {
+      const named = new Map();
+      const unnamed = [];
+      // 先按距离排序，再按页面展示的名称分组；每组的位置由最近的轨道决定。
+      for (const way of [...ways].sort((a, b) => a.distance - b.distance || a.id - b.id)) {
+        const name = (way.display_name || way.name || '').trim();
+        if (!name || name === '未命名') {
+          unnamed.push(way);
+          continue;
+        }
+        if (!named.has(name)) named.set(name, []);
+        named.get(name).push(way);
+      }
+      return [...named.values()].flat().concat(unnamed);
     }
 
     async function queryNearby(latlng, radius) {
@@ -1273,9 +1343,9 @@
       group.open = true;
       const heading = document.createElement('summary');
       heading.className = 'list-group-item bg-light fw-bold';
-      heading.textContent = '附近轨道（按距离）';
+      heading.textContent = '附近轨道';
       group.appendChild(heading);
-      data.ways.forEach(item => group.appendChild(elementButton(item)));
+      sortNearbyWays(data.ways).forEach(item => group.appendChild(elementButton(item)));
       container.appendChild(group);
     }
 
@@ -1444,6 +1514,16 @@
         document.getElementById('way_id').value = data.current_way || '';
         renderWays(data, true);
         document.getElementById('query-status').textContent = `已按所选方向开始第 ${data.legs.length} 段。`;
+      }
+    });
+
+    const connectControl = initJourneyConnect(map, {
+      api:journeyApi, arrows:previewArrows, runAction:runTrackAction, clearPreview,
+      onChanged:data => {
+        clearNearbyQuery();clearElementDetail();clearPreview();
+        document.getElementById('way_id').value = data.current_way || '';
+        renderWays(data,true);
+        document.getElementById('query-status').textContent = data.stop_reason;
       }
     });
 

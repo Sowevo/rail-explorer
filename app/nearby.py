@@ -5,6 +5,15 @@ import math
 PASSENGER_ROUTES = {'train', 'subway', 'light_rail', 'monorail', 'tram'}
 
 
+FRONTEND_TAGS = {'name', 'railway', 'service', 'colour', 'oneway', 'railway:preferred_direction'}
+
+
+def frontend_meta(meta):
+    """仅向页面传递名称、推荐、线路颜色及方向箭头所需的标签。"""
+    return {**meta, 'tags': {key: value for key, value in meta.get('tags', {}).items()
+                            if key in FRONTEND_TAGS}}
+
+
 class NearbyIndex:
     def __init__(self, ways, coords, metadata, relations):
         self.ways, self.coords = ways, coords
@@ -153,12 +162,12 @@ class NearbyIndex:
                 else:
                     if len(line) > 1:
                         geometry.append(line)
-                        geometry_meta.append(self.metadata.get(wid, {}))
+                        geometry_meta.append(frontend_meta(self.metadata.get(wid, {})))
                     line = []
             if len(line) > 1:
                 geometry.append(line)
-                geometry_meta.append(self.metadata.get(wid, {}))
-        result.update(tags=meta.get('tags', {}), geometry=geometry, geometry_meta=geometry_meta,
+                geometry_meta.append(frontend_meta(self.metadata.get(wid, {})))
+        result.update(tags=frontend_meta(meta)['tags'] if kind == 'way' else {}, geometry=geometry, geometry_meta=geometry_meta,
                       memberships=self.memberships(kind, element_id),
                       members=[{**member, 'available':
                                 (member['type'] == 'w' and member['ref'] in self.ways) or

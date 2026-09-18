@@ -1,6 +1,7 @@
 // 数据请求与本地操作入口。行程由页面持有，原始轨道只在此处按需加载一次。
 function createJourneyApi({getData, datasetVersion, onDatasetChanged = () => {}}) {
   let version = datasetVersion, blocked = false, busy = false, generation = 0, dataGeneration = 0;
+  let connectionPreview = null;
   const pageId = globalThis.crypto?.randomUUID?.() || String(Date.now()) + '-' + Math.random();
   const changedMessage = '数据源已切换，请先导出已有轨迹，再清空行程使用新数据。';
   const store = {ways:new Map(), coords:new Map(), nodeWays:new Map(), stops:new Set(), ensure};
@@ -32,11 +33,14 @@ function createJourneyApi({getData, datasetVersion, onDatasetChanged = () => {}}
     const missing = [...new Set(ids.map(Number))].filter(id => !store.ways.has(id));
     for (let i=0;i<missing.length;i+=1000) {
       const data = await postData('/track-data',{way_ids:missing.slice(i,i+1000)});
-      for (const [id,way] of Object.entries(data.ways)) store.ways.set(Number(id),way);
-      for (const [id,point] of Object.entries(data.coords)) store.coords.set(Number(id),point);
-      for (const [id,neighbors] of Object.entries(data.node_ways)) store.nodeWays.set(Number(id),neighbors);
-      data.stops.forEach(n => store.stops.add(n));
+      ingest(data);
     }
+  }
+  function ingest(data) {
+    for (const [id,way] of Object.entries(data.ways)) store.ways.set(Number(id),way);
+    for (const [id,point] of Object.entries(data.coords)) store.coords.set(Number(id),point);
+    for (const [id,neighbors] of Object.entries(data.node_ways)) store.nodeWays.set(Number(id),neighbors);
+    data.stops.forEach(n => store.stops.add(n));
   }
   function summary(data) {
     const leg = data?.legs?.at(-1);
@@ -61,7 +65,7 @@ function createJourneyApi({getData, datasetVersion, onDatasetChanged = () => {}}
     const details = [], engine = new JourneyEngine(store,(event,fields) => details.push({event,...fields}));
     try {
       // 已加载轨道也检查版本，防止旧页面继续使用后端的新索引。
-      await read('/dataset',{signal});
+      if (operation !== 'connectPreview') await read('/dataset',{signal});
       const legs = snapshot?.legs || [];
       let result;
       switch (operation) {
@@ -86,6 +90,20 @@ function createJourneyApi({getData, datasetVersion, onDatasetChanged = () => {}}
             : await engine.advanceRelation(legs,ids);
           break;
         }
+        case 'connectPreview': {
+          const parameters = new JourneyConnector(engine).request(legs,Number(payload.way_id));
+          result = await postData('/connections/preview',parameters,{signal});
+          break;
+        }
+        case 'connect': {
+          if (!connectionPreview || connectionPreview.snapshot !== snapshot ||
+              connectionPreview.plan.target_way !== Number(payload.way_id))
+            throw new Error('连接预览已失效，请重新查找路径。');
+          if (connectionPreview.plan.recommendation && payload.accept_recommendation !== true)
+            throw new Error('推荐位置与原选轨道不同，请先确认改接推荐位置。');
+          result = await new JourneyConnector(engine).apply(legs,connectionPreview.plan);
+          break;
+        }
         case 'undo': result = await engine.undo(legs); break;
         case 'startPreview': result = await engine.startPreview(legs,payload); break;
         case 'start': result = await engine.start(legs,payload); break;
@@ -98,7 +116,12 @@ function createJourneyApi({getData, datasetVersion, onDatasetChanged = () => {}}
         throw new Error('行程已变化，已忽略过期结果。');
       result.revision = revision + Number(mutation);
       result.dataset_version = version;
-      if (mutation) generation++;
+      if (operation === 'connectPreview') {
+        ingest(result.track_data);
+        delete result.track_data;
+        connectionPreview = {snapshot,plan:structuredClone(result)};
+      }
+      if (mutation) { generation++; connectionPreview = null; }
       log(operation,payload,snapshot,mutation ? result : snapshot,details);
       return result;
     } catch (error) {
@@ -114,7 +137,7 @@ function createJourneyApi({getData, datasetVersion, onDatasetChanged = () => {}}
       const response = await fetch('/dataset',{credentials:'omit',cache:'no-store'});
       const data = await response.json();
       if (!response.ok) throw new Error('无法读取当前数据源，请稍后再试。');
-      version = data.dataset_version; blocked = false; generation++; dataGeneration++;
+      version = data.dataset_version; blocked = false; generation++; dataGeneration++; connectionPreview = null;
       for (const key of ['ways','coords','nodeWays','stops']) store[key].clear();
       const result = new JourneyEngine(store).response([]);
       result.revision = (before?.revision ?? 0)+1;
@@ -124,6 +147,8 @@ function createJourneyApi({getData, datasetVersion, onDatasetChanged = () => {}}
     } finally { busy = false; }
   }
   return {read,postData,clear,
+    connectPreview:(payload,options = {}) => operate('connectPreview',payload,{...options,mutation:false}),
+    connect:payload => operate('connect',payload),
     advance:payload => operate('advance',payload),
     forward:payload => operate('forward',payload),
     undo:() => operate('undo'),

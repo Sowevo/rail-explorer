@@ -74,7 +74,7 @@ def configure_logging(app, directory):
         if request.path.startswith('/static/') and response.status_code < 400:
             return response
         payload = request.get_json(silent=True) if request.is_json else None
-        allowed = {'way_ids', 'way_id', 'point', 'direction', 'revision', 'reset', 'replace_current', 'side', 'source', 'dataset_version'}
+        allowed = {'target_way', 'way_ids', 'way_id', 'point', 'direction', 'revision', 'reset', 'replace_current', 'side', 'source', 'dataset_version'}
         body = {k: v for k, v in payload.items() if k in allowed} if isinstance(payload, dict) else None
         result = response.get_json(silent=True) if response.is_json else None
         summary = {k: result[k] for k in ('error', 'code', 'current_way', 'choices', 'path', 'stop_reason', 'revision', 'dataset_version', 'manual_confirmation_required')

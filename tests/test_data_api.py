@@ -1,4 +1,4 @@
-"""隔离索引验证：后端只读数据、版本检查、不使用行程会话。"""
+"""隔离索引验证：后端数据与无状态寻路、版本检查、不使用行程会话。"""
 import importlib.util
 import json
 import logging
@@ -93,3 +93,20 @@ class DataApiTests(unittest.TestCase):
         self.assertIn('diagnostics.0.operation=advance', record)
         self.assertNotIn('not-written', record)
         self.assertEqual(self.client.post('/diagnostics', json={'details':'x'*65000}).status_code, 400)
+
+    def test_connection_plan_single_response_includes_track_data_without_session(self):
+        payload = {'target_way':2, 'tail':[{'way_id':1,'span':[0,1]}],
+                   'blocked_nodes':[], 'used_way_ids':[1], 'dataset_version':self.version}
+        response = self.client.post('/connections/preview', json=payload)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json['items'], [{'way_id':2,'span':[0,1]}])
+        self.assertEqual(response.json['rollback'], 0)
+        self.assertEqual(set(response.json['track_data']['ways']), {'1','2'})
+        self.assertEqual(response.json['dataset_version'], self.version)
+        self.assertNotIn('Set-Cookie', response.headers)
+        self.assertNotIn('retained', response.json)
+        self.assertEqual(self.client.post('/connections/preview', json={**payload,'dataset_version':'old'}).status_code,409)
+        self.assertEqual(self.client.post('/connections/preview', json={**payload,'tail':[]}).status_code,400)
+        self.assertEqual(self.client.post('/connections/preview', json={**payload,'blocked_nodes':[12]}).status_code,400)
+        # 上一个请求的约束不保存在服务器，下一次请求仍能找到同一路径。
+        self.assertEqual(self.client.post('/connections/preview', json=payload).status_code,200)

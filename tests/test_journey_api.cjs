@@ -2,7 +2,8 @@ const {test} = require('node:test'), assert = require('node:assert/strict');
 global.JourneyEngine = require('../app/static/journey_engine.js').JourneyEngine;
 const {createJourneyApi,startRestriction} = require('../app/static/journey_api.js');
 const ways={1:[1,2],2:[2,3],3:[3,4],9:[9,10]};
-let version='china',requests=[],failId=null,waitTrack=null;
+let version='china',requests=[],failId=null,waitTrack=null,recommendConnection=false,waitConnection=null;
+global.JourneyConnector=require('../app/static/journey_connect.js').JourneyConnector;
 global.fetch=async(url,options={})=>{
   const body=options.body ? JSON.parse(options.body) : {};
   requests.push({url,body,options});
@@ -14,6 +15,14 @@ global.fetch=async(url,options={})=>{
     return {ok:true,json:async()=>({ways:[{id:1},{id:2},{id:3}]})};
   }
   if(body.dataset_version!==version)return {ok:false,json:async()=>({code:'dataset_changed',dataset_version:version})};
+  if(url==='/connections/preview') {
+    if(waitConnection)await waitConnection;
+    return {ok:true,json:async()=>({dataset_version:version,target_way:body.target_way,connected_way:3,
+      rollback:0,retained_span:body.tail.at(-1).span,items:[{way_id:3,span:[0,1]}],tracks:[],removed_tracks:[],
+      ...(recommendConnection?{recommendation:{way_id:3}}:{}),
+      track_data:{ways:{3:{nodes:ways[3],meta:{tags:{name:'测试'}}}},coords:{3:[35,139.003],4:[35,139.004]},
+        node_ways:{3:[2,3],4:[3]},stops:[]}})};
+  }
   if(waitTrack)await waitTrack;
   if(body.way_ids.includes(failId))throw new Error('模拟网络失败');
   const nodes=[...new Set(body.way_ids.flatMap(id=>ways[id]))];
@@ -103,4 +112,51 @@ test('关系预览不修改行程；整组加入复查版本与修订号，不�
  const old=q.data;version+='-changed';
  await assert.rejects(q.api.advanceRelation({relation_id:10,anchor_way:1,revision:old.revision}),/数据源已切换/);
  assert.equal(q.data,old);
+});
+
+test('连接预览不修改行程；确认使用同一预览，过期和切换数据源均拒绝',async()=>{
+ global.JourneyConnector=require('../app/static/journey_connect.js').JourneyConnector;
+ const p=page();p.data=await p.api.advance({way_id:1});p.data=await p.api.forward({way_id:2});
+ const before=p.data;
+ const plan=await p.api.connectPreview({way_id:3});
+ assert.equal(p.data,before);assert.equal(plan.revision,before.revision);
+ assert.deepEqual(plan.items.map(x=>x.way_id),[3]);
+ p.data=await p.api.connect({way_id:3,revision:plan.revision});
+ assert.equal(p.data.current_way,3);assert.equal(p.data.legs.length,1);
+ await assert.rejects(p.api.connect({way_id:3,revision:plan.revision}),/行程已变化/);
+ const q=page();q.data=await q.api.advance({way_id:1});q.data=await q.api.forward({way_id:2});
+ const stale=await q.api.connectPreview({way_id:3});q.data=await q.api.undo();
+ await assert.rejects(q.api.connect({way_id:3,revision:stale.revision}),/行程已变化/);
+ q.data=await q.api.forward({way_id:2});await q.api.connectPreview({way_id:3});
+ const old=version;version='changed-for-connect';
+ try {await assert.rejects(q.api.connect({way_id:3}),/数据源已切换/);} finally {version=old;}
+ assert.equal(q.data.current_way,2);
+ assert.ok(requests.filter(r=>r.url==='/track-data').every(r=>!r.body.legs&&!r.body.path));
+});
+
+test('推荐方案必须明确接受，不能用普通确认静默替换目标',async()=>{
+ recommendConnection=true;
+ try {
+  const p=page();p.data=await p.api.advance({way_id:1});p.data=await p.api.forward({way_id:2});
+  const plan=await p.api.connectPreview({way_id:3}),before=p.data;
+  await assert.rejects(p.api.connect({way_id:3,revision:plan.revision}),/确认改接/);assert.equal(p.data,before);
+  p.data=await p.api.connect({way_id:3,revision:plan.revision,accept_recommendation:true});
+  assert.equal(p.data.current_way,3);assert.match(p.data.stop_reason,/推荐/);
+ } finally {recommendConnection=false;}
+});
+
+test('一次连接查找仅一个业务请求，确认不补取track-data；取消或旧结果不应用',async()=>{
+ const p=page();p.data=await p.api.advance({way_id:1});p.data=await p.api.forward({way_id:2});
+ requests=[];const plan=await p.api.connectPreview({way_id:3});
+ assert.deepEqual(requests.filter(r=>r.url!=='/diagnostics').map(r=>r.url),['/connections/preview']);
+ const body=requests.find(r=>r.url==='/connections/preview').body;
+ assert.equal(body.tail.length,2);assert.ok(!body.legs&&!body.coords&&!body.path);
+ p.data=await p.api.connect({way_id:3,revision:plan.revision});
+ assert.ok(!requests.some(r=>r.url==='/track-data'));
+ const q=page();q.data=await q.api.advance({way_id:1});q.data=await q.api.forward({way_id:2});
+ let release;waitConnection=new Promise(resolve=>release=resolve);
+ const controller=new AbortController(),before=q.data,pending=q.api.connectPreview({way_id:3},{signal:controller.signal});
+ await new Promise(resolve=>setImmediate(resolve));controller.abort();release();
+ try {await assert.rejects(pending,/过期/);assert.equal(q.data,before);await assert.rejects(q.api.connect({way_id:3}),/失效/);}
+ finally {waitConnection=null;}
 });

@@ -8,7 +8,7 @@ function setup(){
   setAttribute(k,v){this.attributes[k]=v;}
  }
  const context={lastData:{revision:4,legs:[{path:[{}]}]},trackActionPending:false,relationHoverOwner:null,
-  cutControl:null,startControl:null,updateUndoButton(){},bootstrap:{Tooltip:class{constructor(el,options){el.tooltip=options}}},
+  cutControl:null,startControl:null,connectControl:null,updateUndoButton(){},bootstrap:{Tooltip:class{constructor(el,options){el.tooltip=options}}},
   document:{createElement:()=>new Element(),getElementById:()=>status,
    querySelector:q=>buttons.find(b=>String(b.dataset.relationAdvance)===q.match(/="(\d+)"/)[1]),querySelectorAll:()=>buttons},
   journeyApi:{relationPreview:async()=>({tracks:[{id:3,coords:[[1,2],[3,4]]}],revision:4}),

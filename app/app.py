@@ -4,9 +4,10 @@ import os
 import math
 import hashlib
 import json
-from nearby import NearbyIndex
+from nearby import NearbyIndex, frontend_meta
 from geocoding import Geocoder
 from stations import StationIndex
+from connection import ConnectionPlanner
 from station_map import StationMap
 from urllib.error import HTTPError, URLError
 from diagnostics import configure_logging, record_diagnostic
@@ -76,7 +77,7 @@ DATASET_VERSION = hashlib.sha256(json.dumps(index_signature).encode()).hexdigest
 
 @app.before_request
 def check_dataset():
-    indexed = request.path.startswith(('/track-data', '/elements/', '/nearby', '/stations/'))
+    indexed = request.path.startswith(('/track-data', '/connections/preview', '/elements/', '/nearby', '/stations/'))
     if not indexed:
         return
     payload = request.get_json(silent=True) if request.is_json else None
@@ -105,14 +106,37 @@ def track_data():
     missing = [wid for wid in ids if wid not in way_to_nodes]
     if missing:
         return jsonify(error='当前索引中没有指定轨道。', missing=missing), 404
+    return jsonify(dataset_version=DATASET_VERSION, **pack_tracks(ids))
+
+
+def pack_tracks(ids):
     nodes = {node for wid in ids for node in way_to_nodes[wid]}
-    return jsonify(
-        dataset_version=DATASET_VERSION,
-        ways={wid: {'nodes': way_to_nodes[wid], 'meta': way_to_meta.get(wid, {})} for wid in ids},
+    return dict(
+        ways={wid: {'nodes': way_to_nodes[wid], 'meta': frontend_meta(way_to_meta.get(wid, {}))} for wid in ids},
         coords={node: node_coords[node] for node in nodes if node in node_coords},
         node_ways={node: sorted(node_to_ways.get(node, ())) for node in nodes},
         stops=[node for node in nodes if station_index and
                station_index.features.get(('n', node), {}).get('stop_position')])
+
+
+@app.post('/connections/preview')
+def connection_preview():
+    if request.content_length and request.content_length > 16 * 1024 * 1024:
+        return jsonify(error='连接约束过大，请缩短当前行程后重试。'), 413
+    payload = request.get_json(silent=True)
+    planner = ConnectionPlanner(way_to_nodes, node_coords, way_to_meta, node_to_ways, record_diagnostic)
+    try:
+        plan = planner.preview(payload)
+    except ValueError as error:
+        return jsonify(error=str(error)), 400
+    # 一并返回实际采用的轨道及末条候选数据；前端确认后无需逐条补取。
+    ids = {item['way_id'] for item in plan['items']}
+    for node in planner.kept_nodes(plan['items'][-1]):
+        ids.update(node_to_ways.get(node, ()))
+    record_diagnostic('connection_request', target_way=plan['target_way'],
+                      tail_count=len(payload['tail']), blocked_node_count=len(payload['blocked_nodes']),
+                      used_way_count=len(payload['used_way_ids']), returned_way_count=len(ids))
+    return jsonify(dataset_version=DATASET_VERSION, **plan, track_data=pack_tracks(ids))
 
 
 @app.post('/diagnostics')

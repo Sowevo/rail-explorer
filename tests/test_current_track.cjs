@@ -31,7 +31,7 @@ test('从当前轨道标题进入详情、选择关系、悬浮预览并整组�
  const coords=id=>store.ways.get(id).nodes.map(n=>store.coords.get(n));
  const relation={type:'relation',id:10,name:'测试关系',relation_type:'route',geometry:[coords(1),coords(2),coords(3)],geometry_meta:[{},{},{}],tags:{},members:[],memberships:[],ways:[{id:1},{id:2},{id:3}]};
  const paths=[];let nearbyQueries=0;
- const ctx={document:doc,lastData:data,selectedStartWay:99,typeNames:{rail:'铁路'},trackActionPending:false,cutControl:null,startControl:null,
+ const ctx={document:doc,lastData:data,selectedStartWay:99,typeNames:{rail:'铁路'},trackActionPending:false,cutControl:null,startControl:null,connectControl:null,
   updateUndoButton(){},map:{removeLayer(){},fitBounds(){throw Error('查看或悬浮不应移动地图')}},TRACK_STYLES:{preview:{}},previewLayer:null,relationHoverOwner:null,
   previewArrows:{clear(){},showTracks(){}},railPreviewDirection:()=>null,
   L:{polyline:coords=>coords,featureGroup:()=>({addTo(){return this},bindTooltip(){}})},

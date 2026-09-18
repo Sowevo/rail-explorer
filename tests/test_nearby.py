@@ -64,6 +64,17 @@ class NearbyTests(unittest.TestCase):
         self.assertEqual([meta['tags']['oneway'] for meta in detail['geometry_meta']],['yes','-1'])
         self.assertEqual(self.index.detail('way',3)['geometry_meta'],[])
 
+    def test_detail_filters_unused_tags_without_changing_local_index(self):
+        tags = {'name':'测试线路', 'colour':'#123456', 'service':'siding',
+                'oneway':'yes', 'railway:preferred_direction':'forward',
+                'bridge':'yes', 'source':'survey'}
+        self.index.metadata[1]['tags'] = tags.copy()
+        detail = self.index.detail('way', 1)
+        expected = {key:value for key,value in tags.items() if key not in ('bridge', 'source')}
+        self.assertEqual(detail['tags'], expected)
+        self.assertEqual(detail['geometry_meta'][0]['tags'], expected)
+        self.assertEqual(self.index.metadata[1]['tags'], tags)
+
     def test_direct_memberships_do_not_inherit_parent_direction(self):
         self.relations[10]['tags'].update({'from': 'A', 'to': 'B'})
         self.relations[11]['tags']['from'] = 'Network label'
