@@ -34,6 +34,22 @@ class NearbyTests(unittest.TestCase):
         self.assertAlmostEqual(result['ways'][1]['distance'], 111.2, places=1)
         self.assertEqual([r['id'] for r in result['relations']], [10, 11])
 
+    def test_track_colours_include_line_parents_and_preserve_conflicts(self):
+        self.relations[10]['tags'].update(route='train', colour='#ff0000')
+        self.relations[11]['tags'].update(route_master='train', colour='#0000ff')
+        meta = self.index.track_meta(1)
+        self.assertEqual(meta['relation_colours'], ['#0000ff', '#ff0000'])
+        self.assertIs(self.index.track_meta(1), meta)
+        self.assertEqual(self.index.track_meta(2)['relation_colours'], [])
+        self.assertEqual(self.index.detail('way', 1)['geometry_meta'][0]['relation_colours'],
+                         meta['relation_colours'])
+        self.assertNotIn('relation_colours', self.index.metadata[1])
+
+    def test_track_colours_ignore_station_groups(self):
+        self.relations[10]['tags'].update(type='public_transport', colour='#ff0000')
+        self.relations[11]['tags'].update(route_master='train', colour='#0000ff')
+        self.assertEqual(self.index.track_meta(1)['relation_colours'], [])
+
     def test_missing_node_does_not_create_false_segment(self):
         self.assertGreater(self.index.distance(3, 35, 139.01), 900)
         self.assertEqual(self.index.detail('way', 3)['geometry'], [])

@@ -273,6 +273,7 @@
   <script src="{{ url_for('static', filename='instant_tooltips.js') }}"></script>
   <script src="{{ url_for('static', filename='track_styles.js') }}"></script>
   <script src="{{ url_for('static', filename='journey_export.js') }}"></script>
+  <script src="{{ url_for('static', filename='journey_layers.js') }}"></script>
   <script src="{{ url_for('static', filename='journey_engine.js') }}"></script>
   <script src="{{ url_for('static', filename='journey_connect.js') }}"></script>
   <script src="{{ url_for('static', filename='journey_connect_ui.js') }}"></script>
@@ -301,7 +302,8 @@
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 18, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
     }).addTo(map);
-    let blueLayers = [];
+    let candidateLayers = [];
+    const journeyLayers = createJourneyLayers(map);
     let redLayer = null;
     let undoPreviewLayer = null;
     let lastData = null;
@@ -557,25 +559,22 @@
       submit.setAttribute('aria-label', submit.dataset.tooltip);
       fitAllButton.hidden = !hasJourney;
       map.zoomControl.getContainer().classList.toggle('no-journey', !hasJourney);
-      blueLayers.forEach(layer => map.removeLayer(layer));
-      blueLayers = [];
+      const fallbackColours = data.legs.map(journeyColour);
+      const tracks = data.total_path_coords.map(item => ({
+        ...item, color:trackJourneyColour(item, fallbackColours[item.leg])
+      }));
+      journeyLayers.update(tracks);
+      candidateLayers.forEach(layer => map.removeLayer(layer));
+      candidateLayers = [];
       highlightChoice(data, null);
-      data.total_path_coords.forEach(item => {
-        if (item.coords?.length >= 2) {
-          blueLayers.push(L.polyline(item.coords,
-            {...TRACK_STYLES.journey, color:journeyColour(data.legs[item.leg], item.leg)}).addTo(map));
-        }
-      });
       // 候选完整绘制，仅默认缩放范围截取局部。
       data.choice_coords.forEach(item => {
         if (item.coords?.length >= 2) {
-          blueLayers.push(L.polyline(item.coords,
+          candidateLayers.push(L.polyline(item.coords,
             TRACK_STYLES.candidate).addTo(map));
         }
       });
-      previewArrows.showTracks('journey', data.total_path_coords.map(item => ({
-        ...item, color:journeyColour(data.legs[item.leg], item.leg)
-      })));
+      previewArrows.showTracks('journey', tracks);
       previewArrows.showTracks('choices', data.choice_coords, TRACK_STYLES.candidate);
       updateUndoPreview();
       if (!preserveViewport) fitChoices(data);
@@ -655,14 +654,11 @@
       button.setAttribute('aria-label', '退回一条轨道');
     }
 
+    const distanceTotals = createJourneyDistanceCache((a, b) => L.latLng(a).distanceTo(L.latLng(b)));
+    let exportData = null;
     function journeyDistance(data, legIndex) {
-      let metres = 0;
-      for (const item of data.total_path_coords) {
-        if (legIndex !== undefined && item.leg !== legIndex) continue;
-        for (let i = 1; i < item.coords.length; i++) {
-          metres += L.latLng(item.coords[i - 1]).distanceTo(L.latLng(item.coords[i]));
-        }
-      }
+      const totals = distanceTotals(data);
+      const metres = legIndex === undefined ? totals.total : totals.legs[legIndex];
       return `${(metres / 1000).toFixed(2)} 公里`;
     }
 
@@ -687,23 +683,28 @@
         scope.add(new Option(`第 ${index + 1} 段`, String(index)));
       });
       scope.value = [...scope.options].some(option => option.value === selected) ? selected : 'all';
-      scope.onchange = () => updateExportQuery(data);
-      updateExportQuery(data);
+      scope.onchange = () => updateExportControls(data);
+      updateExportControls(data);
     }
 
-    function updateExportQuery(data) {
+    function updateExportControls(data) {
+      exportData = data;
       const scope = document.getElementById('export-scope').value;
-      const path = scope === 'all' ? data.total_path : data.legs[Number(scope)].path;
-      const ids = [...new Set(path.map(item => item.way_id))];
-      document.getElementById('total-path').hidden = ids.length === 0;
-      document.getElementById('journey-actions').hidden = ids.length === 0;
+      const path = scope === 'all' ? data.total_path : data.legs[Number(scope)]?.path || [];
+      const hasPath = path.length > 0;
+      document.getElementById('total-path').hidden = !hasPath;
+      document.getElementById('journey-actions').hidden = !hasPath;
       document.getElementById('path-summary').textContent = `全部行程 · 约 ${journeyDistance(data)}`;
-      const query = ids.length ? `[out:json][timeout:25];\n(\n${ids.map(id => `  way(${id});`).join('\n')}\n);\n(._;>;);\nout body;` : '';
-      document.getElementById('overpass-query').value = query;
-      document.getElementById('copy-query').disabled = !query;
-      if (!query) document.getElementById('more-actions').hidePopover();
-      document.getElementById('copy-query').dataset.partial = String(path.some(item => item.span));
+      document.getElementById('copy-query').disabled = !hasPath;
+      if (!hasPath) document.getElementById('more-actions').hidePopover();
       clearCopyNotices();
+    }
+
+    function prepareOverpassQuery() {
+      const result = journeyOverpass(exportData, document.getElementById('export-scope').value);
+      const input = document.getElementById('overpass-query');
+      if (input.value !== result.query) input.value = result.query;
+      return result;
     }
 
     const kmlDialog = document.getElementById('kml-dialog');
@@ -872,6 +873,7 @@
     window.addEventListener('resize', () => moreActions.hidePopover());
 
     document.getElementById('view-query').onclick = () => {
+      if (!prepareOverpassQuery().query) return;
       moreActions.hidePopover();
       document.getElementById('query-preview').showModal();
     };
@@ -907,13 +909,13 @@
     }
     async function copyOverpassQuery() {
       moreActions.hidePopover();
+      const {query:text, partial} = prepareOverpassQuery();
+      if (!text) return;
       const query = document.getElementById('overpass-query');
-      if (!query.value) return;
-      const partial = document.getElementById('copy-query').dataset.partial === 'true';
       clearCopyNotices();
       let message, copied = false;
       try {
-        await navigator.clipboard.writeText(query.value);
+        await navigator.clipboard.writeText(text);
         message = '已复制 Overpass 查询。';
         copied = true;
       } catch (_) {

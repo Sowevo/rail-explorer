@@ -1,6 +1,7 @@
 """查询本地轨道几何及所属OSM关系，不依赖在线服务。"""
 
 import math
+from functools import lru_cache
 
 PASSENGER_ROUTES = {'train', 'subway', 'light_rail', 'monorail', 'tram'}
 
@@ -60,6 +61,26 @@ class NearbyIndex:
                 best = min(best, math.hypot(x + t * dx, y + t * dy))
             previous = current
         return best
+
+    @lru_cache(maxsize=100000)
+    def track_meta(self, wid):
+        """颜色只取线路关系及其线路父关系，不使用站点组等关系。"""
+        colours, visited = set(), set()
+        pending = list(self.parents.get(('w', wid), ()))
+        while pending:
+            rid = pending.pop()
+            if rid in visited:
+                continue
+            visited.add(rid)
+            tags = self.relations.get(rid, {}).get('tags', {})
+            if tags.get('type') not in ('route', 'route_master'):
+                continue
+            if (tags.get('route') or tags.get('route_master')) not in PASSENGER_ROUTES | {'railway'}:
+                continue
+            if tags.get('colour'):
+                colours.add(tags['colour'])
+            pending.extend(self.parents.get(('r', rid), ()))
+        return {**frontend_meta(self.metadata.get(wid, {})), 'relation_colours': sorted(colours)}
 
     def summary(self, kind, element_id):
         meta = self.metadata[element_id] if kind == 'way' else self.relations[element_id]
@@ -162,11 +183,11 @@ class NearbyIndex:
                 else:
                     if len(line) > 1:
                         geometry.append(line)
-                        geometry_meta.append(frontend_meta(self.metadata.get(wid, {})))
+                        geometry_meta.append(self.track_meta(wid))
                     line = []
             if len(line) > 1:
                 geometry.append(line)
-                geometry_meta.append(frontend_meta(self.metadata.get(wid, {})))
+                geometry_meta.append(self.track_meta(wid))
         result.update(tags=frontend_meta(meta)['tags'] if kind == 'way' else {}, geometry=geometry, geometry_meta=geometry_meta,
                       memberships=self.memberships(kind, element_id),
                       members=[{**member, 'available':

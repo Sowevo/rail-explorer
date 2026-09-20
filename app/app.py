@@ -4,7 +4,7 @@ import os
 import math
 import hashlib
 import json
-from nearby import NearbyIndex, frontend_meta
+from nearby import NearbyIndex
 from geocoding import Geocoder
 from stations import StationIndex
 from connection import ConnectionPlanner
@@ -112,7 +112,7 @@ def track_data():
 def pack_tracks(ids):
     nodes = {node for wid in ids for node in way_to_nodes[wid]}
     return dict(
-        ways={wid: {'nodes': way_to_nodes[wid], 'meta': frontend_meta(way_to_meta.get(wid, {}))} for wid in ids},
+        ways={wid: {'nodes': way_to_nodes[wid], 'meta': nearby_index.track_meta(wid)} for wid in ids},
         coords={node: node_coords[node] for node in nodes if node in node_coords},
         node_ways={node: sorted(node_to_ways.get(node, ())) for node in nodes},
         stops=[node for node in nodes if station_index and

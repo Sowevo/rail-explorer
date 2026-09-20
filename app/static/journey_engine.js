@@ -417,7 +417,7 @@ class JourneyEngine {
         choice.coords = JourneyEngine.slice(this.raw(last),end,terminal); choice.reversed = end>terminal;
       }
     }
-    return {...result, legs:legs.map(leg => ({...leg,colour_candidates:[this.meta(leg.start_way).tags?.colour]})),
+    return {...result, legs,
       total_path:legs.flatMap(leg => leg.path),active_path:active,current_way:legs.at(-1)?.current_way ?? null,
       choices,path,visited_path:path,stop_reason:result.stop_reason || '',choice_coords:choiceCoords,path_coords:path.map(track),
       undo:{kind:'way',coords:last ? [this.coords(last)] : []},
