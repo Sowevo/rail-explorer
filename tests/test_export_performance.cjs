@@ -48,6 +48,11 @@ test('Overpass 普通更新不生成、不写文本框；查看时按最新范�
  const next={legs:[{path:[{way_id:3}]}],total_path:[{way_id:3}],total_path_coords:[]};
  element('export-scope').value='all';c.updateExportControls(next);r=c.prepareOverpassQuery();assert(r.query.includes('way(3)'));assert(!r.query.includes('way(2)'));
  c.updateExportControls({legs:[],total_path:[],total_path_coords:[]});assert.equal(element('copy-query').disabled,true);assert.equal(c.prepareOverpassQuery().query,'');
+ for(const id of ['export-scope','download-kml','clear-journey','view-query']) assert.equal(element(id).disabled,true);
+ assert(element('clear-journey').dataset.disabledReason);
+ c.updateExportControls(next);
+ for(const id of ['export-scope','download-kml','clear-journey','view-query','copy-query']) assert.equal(element(id).disabled,false);
+ assert.equal(element('clear-journey').dataset.disabledReason,'');
  // 两个复制入口共用函数；校验剪贴板成功及失败时的手动复制退路。
  let copied='',opened=0,selected=0;
  c.moreActions={hidePopover(){}};c.showCopyNotice=()=>{};

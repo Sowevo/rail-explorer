@@ -183,9 +183,6 @@
     <div class="left-panel">
       <div class="panel-header">
       <div class="section-title">轨道操作</div>
-      {% if build_info and build_info.get('region') %}
-      <div class="small text-muted mb-2">代码 {{ build_info.revision[:7] }} · {{ {'china':'中国', 'japan':'日本', 'custom':'自定义'}.get(build_info.region, build_info.region) }} · 数据 {{ build_info.data_date or '日期未知' }}</div>
-      {% endif %}
       <form id="way-form" class="mb-3">
         <div class="input-group">
           <input type="text" id="way_id" class="form-control" placeholder="输入轨道 way ID" aria-label="轨道 way ID" inputmode="numeric" pattern="[0-9]+" maxlength="100" required>
@@ -216,11 +213,11 @@
         <div id="journey-legs" class="mb-2"></div>
       </div>
       </div>
-      <div id="journey-actions" class="journey-actions" hidden>
+      <div id="journey-actions" class="journey-actions">
         <div class="export-actions">
-          <select id="export-scope" class="form-select form-select-sm" aria-label="导出范围" data-tooltip="选择导出范围"><option value="all">全部行程</option></select>
-          <button id="download-kml" type="button" class="btn btn-primary btn-sm" data-tooltip="下载 KML" aria-label="下载 KML"><i class="bi bi-download me-1" aria-hidden="true"></i>下载 KML</button>
-          <button id="clear-journey" class="btn btn-outline-danger btn-sm" type="button" data-tooltip="清空全部行程" aria-label="清空全部行程"><i class="bi bi-trash me-1" aria-hidden="true"></i>清空</button>
+          <select id="export-scope" disabled class="form-select form-select-sm" aria-label="导出范围" data-tooltip="选择导出范围"><option value="all">全部行程</option></select>
+          <button id="download-kml" disabled type="button" class="btn btn-primary btn-sm" data-tooltip="下载 KML" aria-label="下载 KML"><i class="bi bi-download me-1" aria-hidden="true"></i>下载 KML</button>
+          <button id="clear-journey" disabled data-disabled-reason="尚未选择轨道" class="btn btn-outline-danger btn-sm" type="button" data-tooltip="清空全部行程" aria-label="清空全部行程"><i class="bi bi-trash me-1" aria-hidden="true"></i>清空</button>
           <button id="more-actions-button" type="button" class="btn btn-outline-secondary btn-sm" popovertarget="more-actions" aria-expanded="false">更多 <i class="bi bi-three-dots" aria-hidden="true"></i></button>
         </div>
         <div id="export-status" class="toast" role="status" aria-live="polite" aria-atomic="true">
@@ -237,7 +234,14 @@
   </div>
   <div id="more-actions" popover="auto" aria-label="更多操作">
     <button id="copy-query" type="button" class="btn btn-light btn-sm w-100" disabled><i class="bi bi-clipboard me-1" aria-hidden="true"></i>复制 Overpass 查询</button>
-    <button id="view-query" type="button" class="btn btn-light btn-sm w-100"><i class="bi bi-code-slash me-1" aria-hidden="true"></i>查看查询内容</button>
+    <button id="view-query" disabled type="button" class="btn btn-light btn-sm w-100"><i class="bi bi-code-slash me-1" aria-hidden="true"></i>查看查询内容</button>
+    {% if build_info and build_info.get('region') %}
+    <div class="small text-muted border-top mt-2 pt-2 px-2" aria-label="版本与数据">
+      <div>程序版本：{{ build_info.revision[:7] }}</div>
+      <div>数据区域：{{ {'china':'中国', 'japan':'日本', 'custom':'自定义'}.get(build_info.region, build_info.region) }}</div>
+      <div>数据日期：{{ build_info.data_date or '日期未知' }}</div>
+    </div>
+    {% endif %}
   </div>
   <dialog id="query-preview" class="border rounded p-3" style="width:480px;max-width:90vw;" aria-labelledby="query-preview-title">
     <div id="query-preview-title" class="fw-bold mb-2">Overpass 查询内容</div>
@@ -696,10 +700,14 @@
       const path = scope === 'all' ? data.total_path : data.legs[Number(scope)]?.path || [];
       const hasPath = path.length > 0;
       document.getElementById('total-path').hidden = !hasPath;
-      document.getElementById('journey-actions').hidden = !hasPath;
+      document.getElementById('export-scope').disabled = !data.total_path.length;
+      document.getElementById('download-kml').disabled = !hasPath;
+      document.getElementById('view-query').disabled = !hasPath;
+      const clearButton = document.getElementById('clear-journey');
+      clearButton.dataset.disabledReason = data.total_path.length ? '' : '尚未选择轨道';
+      clearButton.disabled = !data.total_path.length;
       document.getElementById('path-summary').textContent = `全部行程 · 约 ${journeyDistance(data)}`;
       document.getElementById('copy-query').disabled = !hasPath;
-      if (!hasPath) document.getElementById('more-actions').hidePopover();
       clearCopyNotices();
     }
 
