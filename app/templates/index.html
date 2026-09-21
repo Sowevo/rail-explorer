@@ -183,6 +183,9 @@
     <div class="left-panel">
       <div class="panel-header">
       <div class="section-title">轨道操作</div>
+      {% if build_info and build_info.get('region') %}
+      <div class="small text-muted mb-2">代码 {{ build_info.revision[:7] }} · {{ {'china':'中国', 'japan':'日本', 'custom':'自定义'}.get(build_info.region, build_info.region) }} · 数据 {{ build_info.data_date or '日期未知' }}</div>
+      {% endif %}
       <form id="way-form" class="mb-3">
         <div class="input-group">
           <input type="text" id="way_id" class="form-control" placeholder="输入轨道 way ID" aria-label="轨道 way ID" inputmode="numeric" pattern="[0-9]+" maxlength="100" required>

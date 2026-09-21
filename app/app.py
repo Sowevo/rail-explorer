@@ -4,6 +4,7 @@ import os
 import math
 import hashlib
 import json
+from index_store import resolve_index, read_metadata
 from nearby import NearbyIndex
 from geocoding import Geocoder
 from stations import StationIndex
@@ -13,6 +14,9 @@ from urllib.error import HTTPError, URLError
 from diagnostics import configure_logging, record_diagnostic
 
 DATA_DIR = os.environ.get('RAIL_DATA_DIR', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data'))
+DATA_DIR = str(resolve_index(DATA_DIR))
+BUILD_INFO = read_metadata(DATA_DIR)
+BUILD_INFO['revision'] = os.environ.get('RAIL_REVISION', 'local')
 NODE_TO_WAYS_PATH = os.path.join(DATA_DIR, 'node_to_ways.pkl')
 WAY_TO_NODES_PATH = os.path.join(DATA_DIR, 'way_to_nodes.pkl')
 NODE_COORDS_PATH = os.path.join(DATA_DIR, 'node_coords.pkl')
@@ -37,7 +41,7 @@ if node_coords:
     ]
 
 app = Flask(__name__)
-log_path = configure_logging(app, os.path.join(DATA_DIR, 'logs'))
+log_path = configure_logging(app, os.environ.get('RAIL_LOG_DIR', os.path.join(DATA_DIR, 'logs')))
 
 
 relations_path = os.path.join(DATA_DIR, 'relations.pkl')
@@ -87,6 +91,11 @@ def check_dataset():
                        code='dataset_changed', dataset_version=DATASET_VERSION), 409
 
 
+@app.get('/health')
+def health():
+    return jsonify(ready=True, **BUILD_INFO)
+
+
 @app.get('/dataset')
 def dataset():
     return jsonify(dataset_version=DATASET_VERSION, map_bounds=map_bounds)
@@ -94,7 +103,7 @@ def dataset():
 
 @app.route('/')
 def index():
-    return render_template('index.html', map_bounds=map_bounds, dataset_version=DATASET_VERSION)
+    return render_template('index.html', map_bounds=map_bounds, dataset_version=DATASET_VERSION, build_info=BUILD_INFO)
 
 @app.post('/track-data')
 def track_data():

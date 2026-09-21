@@ -1,0 +1,11 @@
+内置中国、日本索引的数据来源：
+© OpenStreetMap contributors
+Extracts provided by Geofabrik: https://download.geofabrik.de/
+
+索引数据按 Open Data Commons Open Database License (ODbL) 1.0 提供：
+https://opendatacommons.org/licenses/odbl/1-0/
+https://www.openstreetmap.org/copyright
+
+索引生成代码：/opt/rail/app/parse_osm.py、station_index.py。
+实际数据日期与来源记录在 /data/current/metadata.json。
+本声明适用于内置 OSM 数据，不指定程序代码的许可证。

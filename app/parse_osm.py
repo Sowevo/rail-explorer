@@ -10,7 +10,7 @@ from urllib.parse import urlsplit
 from pbf_download import download_pbf
 from station_index import build_station_index
 
-DATA_DIR = Path(__file__).resolve().parent / 'data'
+DATA_DIR = Path(os.environ.get('RAIL_DATA_DIR', Path(__file__).resolve().parent / 'data'))
 RAILWAY_TYPES = ('rail', 'subway', 'light_rail', 'monorail')
 NODE_TO_WAYS_PATH = os.path.join(DATA_DIR, 'node_to_ways.pkl')
 WAY_TO_NODES_PATH = os.path.join(DATA_DIR, 'way_to_nodes.pkl')

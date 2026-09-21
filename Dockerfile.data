@@ -1,0 +1,7 @@
+ARG BASE_IMAGE=ghcr.io/sowevo/rail-explorer:latest
+FROM ${BASE_IMAGE}
+LABEL io.rail-explorer.data.license="ODbL-1.0" \
+      io.rail-explorer.data.attribution="© OpenStreetMap contributors; extracts by Geofabrik"
+# 构建上下文只有经过验证的六个索引和元信息，没有下载缓存或 PBF。
+COPY . /data/indexes/bundled/
+RUN ln -s indexes/bundled /data/current

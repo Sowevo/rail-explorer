@@ -6,6 +6,7 @@ import fcntl
 import hashlib
 import http.client
 import json
+import os
 from pathlib import Path
 import re
 import shutil
@@ -25,6 +26,8 @@ TIMEOUT = 30
 
 def get_download_dir():
     """优先查询系统下载目录，无法查询时回退到用户主目录下的Downloads。"""
+    if os.environ.get('RAIL_DOWNLOAD_DIR'):
+        return Path(os.environ['RAIL_DOWNLOAD_DIR'])
     command = None
     if sys.platform == 'darwin':
         command = ['/usr/bin/osascript', '-e', 'POSIX path of (path to downloads folder)']
