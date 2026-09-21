@@ -59,3 +59,42 @@ class ReleaseTests(unittest.TestCase):
             with patch.object(release, 'package_missing', return_value=False):
                 with self.assertRaises(RuntimeError):
                     release.exists('example:fixed')
+
+    def test_unchanged_pbf_skips_download_index_and_image_build(self):
+        import json
+        signature = {'validator': ['ETag', '"same"'], 'size': 100}
+        metadata = {'index_format': 1, 'region': 'china', 'data_date': '2026-09-20',
+                    'source_signature': signature}
+        def export(image, directory):
+            (directory / 'metadata.json').write_text(json.dumps(metadata))
+        def command(*args, **kwargs):
+            if 'INDEX_FORMAT' in args[-1]:
+                return '1'
+            if '_probe' in args[-2]:
+                return json.dumps(signature)
+            raise AssertionError(f'不应下载、生成或构建：{args}')
+        with patch.object(release, 'exists', return_value=True), \
+             patch.object(release, 'export_index', side_effect=export), \
+             patch.object(release, 'run', side_effect=command), \
+             patch.object(release, 'smoke') as smoke:
+            self.assertIsNone(release.country('ghcr.io/example/rail', 'base', 'a' * 40, 'china', 'data'))
+            smoke.assert_not_called()
+
+    def test_program_release_reuses_compatible_index_and_fixed_image(self):
+        import json
+        metadata = {'index_format': 1, 'region': 'japan', 'data_date': '2026-09-20'}
+        image = 'ghcr.io/example/rail:japan-20260920-aaaaaaa'
+        def export(source, directory):
+            (directory / 'metadata.json').write_text(json.dumps(metadata))
+        def command(*args, **kwargs):
+            if 'INDEX_FORMAT' in args[-1]:
+                return '1'
+            if args == ('docker', 'pull', image) or args == ('docker', 'run', '--rm', image, 'validate'):
+                return
+            raise AssertionError(f'不应下载、生成或构建：{args}')
+        with patch.object(release, 'exists', return_value=True), \
+             patch.object(release, 'export_index', side_effect=export), \
+             patch.object(release, 'run', side_effect=command), \
+             patch.object(release, 'smoke') as smoke:
+            self.assertEqual(release.country('ghcr.io/example/rail', 'base', 'a' * 40, 'japan', 'program'), image)
+            smoke.assert_called_once_with(image)

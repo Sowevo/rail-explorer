@@ -110,6 +110,8 @@ def country(repository, base, revision, region, mode):
             if signature.get('validator') and signature == metadata.get('source_signature'):
                 print(f'{region}：数据源未变化，跳过。', flush=True)
                 return None
+        if compatible and mode == 'program':
+            print(f'{region}：复用已发布索引，不下载或解析 PBF。', flush=True)
         if not compatible or mode == 'data':
             # 单独挂载工作目录，不覆盖导出的旧索引。
             work = root / 'work'
@@ -123,6 +125,7 @@ def country(repository, base, revision, region, mode):
             raise RuntimeError('PBF 未提供可信数据日期，无法发布日期标签。')
         image = f'{repository}:{region}-{date.replace("-", "")}-{revision[:7]}'
         if exists(image):
+            print(f'{image} 已存在，直接复用并验证。', flush=True)
             existing = root / 'existing'
             existing.mkdir()
             export_index(image, existing)
@@ -148,10 +151,18 @@ def main():
     args = parser.parse_args()
     repository = f'ghcr.io/{os.environ["GITHUB_REPOSITORY"].lower()}'
     revision = run('git', 'rev-parse', 'HEAD', capture=True)
-    base = f'{repository}:git-{revision[:7]}'
-    if args.mode == 'program' and not exists(base):
-        run('docker', 'buildx', 'build', '--platform', 'linux/amd64,linux/arm64',
-            '--build-arg', f'REVISION={revision}', '-t', base, '--push', str(ROOT))
+    base = f'{repository}:{revision[:7]}'
+    if args.mode == 'program':
+        if exists(base):
+            print(f'{base} 已存在，直接复用程序镜像。', flush=True)
+        else:
+            # 缓存独立于固定镜像标签；跨 Actions 运行复用两种架构的依赖层。
+            cache = f'{repository}:buildcache-base'
+            run('docker', 'buildx', 'build', '--platform', 'linux/amd64,linux/arm64',
+                '--cache-from', f'type=registry,ref={cache}',
+                '--cache-to', f'type=registry,ref={cache},mode=max,ignore-error=true',
+                '--progress', 'plain',
+                '--build-arg', f'REVISION={revision}', '-t', base, '--push', str(ROOT))
     run('docker', 'pull', base)
     # 后续镜像锁定基础镜像 digest，防止构建期间标签改变。
     base_digest = run('docker', 'inspect', '-f', '{{index .RepoDigests 0}}', base, capture=True)
